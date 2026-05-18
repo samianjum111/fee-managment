@@ -117,6 +117,8 @@ class StudentAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
     search_fields = ('name', 'roll_number', 'father_name', 'father_cnic')
     ordering = ('-enrolled_on',)
     
+    readonly_fields = ('display_student_fee',)
+
     fieldsets = (
         ('Core Enrollment Records', {
             'fields': ('name', 'roll_number', 'status')
@@ -127,16 +129,23 @@ class StudentAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
         ('Parental & Verification Matrix', {
             'fields': ('father_name', 'father_cnic', 'parent_mobile')
         }),
-        ('Demographics & Contextual Information', {
-            'fields': ('gender', 'date_of_birth', 'address', 'photo', 'notes'),
-            'classes': ('collapse',),
+        ('Financial Status Matrix', {
+            'fields': ('display_student_fee', 'custom_fee'),
+            'description': 'Current fee parameters loaded dynamically via matching class standard configurations.',
         }),
     )
+
+    def display_student_fee(self, obj):
+        if obj.pk:
+            return f"RS {obj.custom_fee}"
+        return "Will be computed based on selected class standard fee roster."
+    display_student_fee.short_description = "Active Monthly Fee Structure"
     
     def get_readonly_fields(self, request, obj=None):
+        base_fields = list(self.readonly_fields)
         if obj:
-            return self.readonly_fields + ('roll_number',)
-        return self.readonly_fields
+            base_fields.append('roll_number')
+        return tuple(base_fields)
 
 # --- AXIS Fee Structure Registry Injection ---
 from .models import FeeStructure
