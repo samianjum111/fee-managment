@@ -2,17 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Register Student Node</title>
+    <title>Student Induction Wizard | AXIS</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0b1329; color: #f1f5f9; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .form-card { background: #1c2541; padding: 40px; border-radius: 12px; border: 1px solid #3a506b; max-width: 450px; width: 100%; box-shadow: 0 15px 30px rgba(0,0,0,0.4); }
-        h2 { color: #6fffe9; margin-top: 0; margin-bottom: 25px; text-align: center; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; color: #8da2bb; font-weight: 500; }
-        input[type="text"] { width: 100%; padding: 12px; background: #0b1329; border: 1px solid #3a506b; border-radius: 6px; color: #fff; box-sizing: border-box; }
-        input[type="text"]:focus { border-color: #6fffe9; outline: none; }
-        .btn-submit { width: 100%; background: #6fffe9; color: #0b1329; border: none; padding: 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 1em; margin-top: 10px; }
-        .btn-cancel { display: block; text-align: center; margin-top: 15px; color: #8da2bb; text-decoration: none; font-size: 0.9em; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
+        .form-card { background: #1e293b; max-width: 750px; margin: 40px auto; padding: 35px; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+        h2 { color: #38bdf8; margin-top: 0; text-align: center; font-size: 1.6rem; border-bottom: 2px solid #334155; padding-bottom: 15px; }
+        .section-title { color: #34d399; font-size: 1.1rem; margin: 25px 0 15px 0; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+        .form-group { margin-bottom: 15px; display: flex; flex-direction: column; }
+        label { margin-bottom: 8px; color: #94a3b8; font-weight: 500; font-size: 0.9rem; }
+        label.required::after { content: " *"; color: #ef4444; }
+        input, select, textarea { width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #fff; box-sizing: border-box; font-size: 0.95rem; }
+        input:focus, select:focus, textarea:focus { border-color: #38bdf8; outline: none; box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2); }
+        .btn-container { display: flex; gap: 15px; margin-top: 30px; }
+        .btn { flex: 1; padding: 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 1em; text-align: center; text-decoration: none; }
+        .btn-submit { background: #38bdf8; color: #0f172a; border: none; }
+        .btn-submit:hover { background: #7dd3fc; }
+        .btn-cancel { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+        .btn-cancel:hover { background: #334155; color: #fff; }
     </style>
 </head>
 <body>
@@ -20,20 +27,80 @@
         <h2>Student Induction Wizard</h2>
         <form method="POST">
             {% csrf_token %}
-            <div class="form-group">
-                <label>Full Name</label>
-                <input type="text" name="name" placeholder="Enter student's legal name" required>
+            
+            <div class="section-title">Core Mandated Records (Required)</div>
+            <div class="grid-container">
+                <div class="form-group">
+                    <label class="required">Student Name</label>
+                    <input type="text" name="name" required placeholder="Full Legal Name">
+                </div>
+                <div class="form-group">
+                    <label class="required">Father Name</label>
+                    <input type="text" name="father_name" required placeholder="Father's Full Name">
+                </div>
+                <div class="form-group">
+                    <label class="required">Father CNIC</label>
+                    <input type="text" name="father_cnic" required placeholder="35202-XXXXXXX-X">
+                </div>
+                <div class="form-group">
+                    <label class="required">Parent Mobile Number</label>
+                    <input type="text" name="parent_mobile" required placeholder="e.g. 03001234567">
+                </div>
+                <div class="form-group">
+                    <label class="required">Class / Grade</label>
+                    <input type="text" name="grade" required placeholder="e.g. 10th Class">
+                </div>
+                <div class="form-group">
+                    <label class="required">Section</label>
+                    <input type="text" name="section" required placeholder="e.g. Jinnah-A">
+                </div>
+                <div class="form-group">
+                    <label class="required">Admission Date</label>
+                    <input type="date" name="admission_date" required>
+                </div>
+                <div class="form-group">
+                    <label class="required">Operational Status</label>
+                    <select name="status" required>
+                        <option value="active" selected>Active Enrolled</option>
+                        <option value="suspended">Suspended</option>
+                        <option value="struck_off">Struck Off</option>
+                        <option value="graduated">Graduated</option>
+                    </select>
+                </div>
             </div>
-            <div class="form-group">
-                <label>Roll Number Token</label>
-                <input type="text" name="roll_number" placeholder="e.g. AX-2026-99" required>
+
+            <div class="section-title">Demographic Records (Optional Context)</div>
+            <div class="grid-container">
+                <div class="form-group">
+                    <label>Gender</label>
+                    <select name="gender">
+                        <option value="" selected>---------</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Date of Birth</label>
+                    <input type="date" name="date_of_birth">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Grade Level / Class</label>
-                <input type="text" name="grade" placeholder="e.g. 10th Grade" required>
+            
+            <div class="form-group" style="margin-top: 15px;">
+                <label>Residential Address</label>
+                <textarea name="address" rows="2" placeholder="Full permanent physical address"></textarea>
             </div>
-            <button type="submit" class="btn-submit">Commit Profile to Tenant Ledger</button>
-            <a href="{% url 'school_home' %}" class="btn-cancel">Abort & Return to Command Dashboard</a>
+
+            <div class="section-title">Internal Archival Notes</div>
+            <div class="form-group">
+                <label>Administrative Notes</label>
+                <textarea name="notes" rows="2" placeholder="Any specific remarks, medical history or concessions..."></textarea>
+            </div>
+
+            <div class="btn-container">
+                <button type="submit" class="btn btn-submit">Commit Profile to Tenant Ledger</button>
+                <a href="{% url 'school_home' %}" class="btn btn-cancel">Abort & Return</a>
+            </div>
         </form>
     </div>
 </body>

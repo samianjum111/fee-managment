@@ -1,34 +1,11 @@
 from django.urls import path
-from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth import logout
-from axis_saas.models import Student
-
-@login_required(login_url='/admin/login/')
-def school_dashboard(request):
-    # Isolated context execution ensures only this school's students are populated!
-    students = Student.objects.all().order_by('-enrolled_on')
-    return render(request, 'tenant/dashboard.html', {'students': students})
-
-@login_required(login_url='/admin/login/')
-def add_student(request):
-    if request.method == 'POST':
-        name = request.POST.get('name')
-        roll_number = request.POST.get('roll_number')
-        grade = request.POST.get('grade')
-        
-        if name and roll_number and grade:
-            Student.objects.create(name=name, roll_number=roll_number, grade=grade)
-            return redirect('school_home')
-            
-    return render(request, 'tenant/student_form.html')
-
-def school_logout(request):
-    logout(request)
-    return redirect('/admin/login/')
+from django.contrib import admin
+from axis_saas.tenant_views import tenant_dashboard, add_student_instance
+from django.contrib.auth import views as auth_views
 
 urlpatterns = [
-    path('', school_dashboard, name='school_home'),
-    path('add-student/', add_student, name='add_student'),
-    path('logout/', school_logout, name='school_logout'),
+    path('', tenant_dashboard, name='school_home'),
+    path('students/add/', add_student_instance, name='add_student'),
+    path('admin/', admin.site.urls),
+    path('logout/', auth_views.LogoutView.as_view(next_page='school_home'), name='school_logout'),
 ]

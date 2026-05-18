@@ -79,3 +79,36 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
 
     def has_view_permission(self, request, obj=None):
         return request.tenant.schema_name == 'public'
+
+
+# --- AXIS Student Registry Injection ---
+from .models import Student
+from .admin import TenantOnlyAdminMixin
+
+@admin.register(Student)
+class StudentAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ('roll_number', 'name', 'grade', 'section', 'status', 'enrolled_on')
+    list_filter = ('grade', 'section', 'status', 'gender')
+    search_fields = ('name', 'roll_number', 'father_name', 'father_cnic')
+    ordering = ('-enrolled_on',)
+    
+    fieldsets = (
+        ('Core Enrollment Records', {
+            'fields': ('name', 'roll_number', 'status')
+        }),
+        ('Academic & Class Placement', {
+            'fields': ('grade', 'section', 'admission_date')
+        }),
+        ('Parental & Verification Matrix', {
+            'fields': ('father_name', 'father_cnic', 'parent_mobile')
+        }),
+        ('Demographics & Contextual Information', {
+            'fields': ('gender', 'date_of_birth', 'address', 'photo', 'notes'),
+            'classes': ('collapse',),
+        }),
+    )
+    
+    def get_readonly_fields(self, request, obj=None):
+        if obj: # Roll number shouldn't be edited manually once set
+            return self.readonly_fields + ('roll_number',)
+        return self.readonly_fields
