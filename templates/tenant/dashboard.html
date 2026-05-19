@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>{{ request.tenant.name }} | School Admin</title>
+    <title>{{ tenant.name }} | School Admin</title>
     <style>
         body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
         .layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
@@ -30,29 +30,29 @@
         <aside class="sidebar">
             <div>
                 <div class="brand">School Admin</div>
-                <div class="school-name">{{ request.tenant.name }}</div>
+                <div class="school-name">{{ tenant.name }}</div>
             </div>
             <ul class="menu">
-                <li class="menu-item"><a href="{% url 'school_home' %}" class="active">Dashboard</a></li>
+                <li class="menu-item"><a href="{% url 'school_portal' schema_name=tenant.schema_name %}" class="active">Dashboard</a></li>
             </ul>
-            <div class="logout"><a href="{% url 'school_logout' %}">Logout</a></div>
+            <div class="logout"><a href="{% url 'school_portal_logout' schema_name=tenant.schema_name %}">Logout</a></div>
         </aside>
         <main class="content">
             <div class="card">
                 <div class="headline">
                     <div>
-                        <h1>Welcome, {{ request.tenant.name }}</h1>
-                        <p class="subtext">This is your custom school admin portal. Use this secure place to manage your school once you log in.</p>
+                        <h1>Welcome to {{ tenant.name }}</h1>
+                        <p class="subtext">This is your custom school admin portal. Only your school tenant sees this page.</p>
                     </div>
-                    <span style="color: #94a3b8; font-size: 0.95rem;">Portal access only for your tenant</span>
+                    <span style="color: #94a3b8; font-size: 0.95rem;">Portal path: /portal/{{ tenant.schema_name }}/</span>
                 </div>
 
                 <div class="summary">
                     <h2>Portal status</h2>
-                    <p>The portal is connected to the tenant schema <strong>{{ request.tenant.schema_name }}</strong> and will authenticate with the username/password set by the super admin.</p>
+                    <p>The school portal is live and secured with the credentials set by the super admin.</p>
                 </div>
 
-                <p class="footer-note">Your school admin panel is custom-built for your tenant. The shared Django admin is only for the super admin on the public schema.</p>
+                <p class="footer-note">Your school admin panel is custom-built for your tenant. The shared Django admin is reserved for the super admin only.</p>
             </div>
         </main>
     </div>

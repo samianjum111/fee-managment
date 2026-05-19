@@ -1,16 +1,12 @@
 from django.contrib import admin
 from django.urls import path
 from django.http import HttpResponse, HttpResponseNotFound
-from django.shortcuts import redirect
-from django_tenants.utils import schema_context
-from django.contrib.auth import views as auth_views
+from django.shortcuts import redirect, render
 
-from axis_saas.models import SchoolClient, SchoolDomain
-from axis_saas.tenant_views import tenant_dashboard, add_student_instance, fee_management_dashboard
+from axis_saas.models import SchoolClient
 
 
 def saas_homepage(request):
-    # Strictly clean, static generic entry point with zero information disclosure
     return HttpResponse('''
         <style>
             body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
@@ -20,65 +16,67 @@ def saas_homepage(request):
         </style>
         <div class="card">
             <h1>AXIS Engine Active 🚀</h1>
-            <p>Welcome to the AXIS Cloud Platform. Direct portal access requires your assigned institutional sub-domain gate routing.</p>
+            <p>School portals are available at <strong>/portal/&lt;schema_name&gt;/</strong>.</p>
         </div>
     ''')
 
 
-def public_root(request):
-    tenant = resolve_tenant_host(request)
+def get_school_tenant(schema_name):
+    schema_name = schema_name.lower().strip()
+    tenant = SchoolClient.objects.filter(schema_name__iexact=schema_name, is_active=True).first()
     if tenant:
-        return redirect('/portal/')
-    return saas_homepage(request)
+        return tenant
+    return SchoolClient.objects.filter(name__iexact=schema_name, is_active=True).first()
 
 
-def resolve_tenant_host(request):
-    host = request.get_host().split(':')[0].lower()
-    if host == 'localhost':
-        return None
-
-    if host.endswith('.localhost'):
-        schema_candidate = host.split('.')[0]
-        tenant = SchoolClient.objects.filter(schema_name__iexact=schema_candidate, is_active=True).first()
-        if tenant:
-            return tenant
-
-        tenant = SchoolClient.objects.filter(name__iexact=schema_candidate, is_active=True).first()
-        if tenant:
-            return tenant
-
-        domain_record = SchoolDomain.objects.filter(domain__iexact=host, tenant__is_active=True).select_related('tenant').first()
-        if domain_record:
-            return domain_record.tenant
-
-    return None
-
-
-def tenant_public_dispatch(request, path=''):
-    tenant = resolve_tenant_host(request)
+def school_login(request, schema_name):
+    tenant = get_school_tenant(schema_name)
     if not tenant:
-        return HttpResponseNotFound('Tenant domain not found for this host.')
+        return HttpResponseNotFound('School portal not found.')
 
-    request.tenant = tenant
-    with schema_context(tenant.schema_name):
-        normalized_path = path.rstrip('/')
-        if normalized_path in ['', 'portal']:
-            return tenant_dashboard(request)
-        if normalized_path == 'login':
-            login_view = auth_views.LoginView.as_view(template_name='tenant/login.html', redirect_authenticated_user=True)
-            return login_view(request)
-        if normalized_path == 'logout':
-            logout_view = auth_views.LogoutView.as_view(next_page='tenant_login')
-            return logout_view(request)
-        if normalized_path == 'students/add':
-            return add_student_instance(request)
-        if normalized_path == 'fees':
-            return fee_management_dashboard(request)
+    error = None
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        if username == tenant.admin_username and password == tenant.admin_password:
+            request.session['school_admin_authenticated'] = True
+            request.session['school_admin_schema'] = tenant.schema_name
+            request.session['school_admin_name'] = tenant.name
+            return redirect(f'/portal/{tenant.schema_name}/')
+        error = 'Username or password is incorrect.'
 
-    return HttpResponseNotFound('Tenant portal path not found.')
+    return render(request, 'tenant/login.html', {
+        'tenant': tenant,
+        'error': error,
+    })
+
+
+def school_logout(request, schema_name):
+    tenant = get_school_tenant(schema_name)
+    if tenant:
+        request.session.pop('school_admin_authenticated', None)
+        request.session.pop('school_admin_schema', None)
+        request.session.pop('school_admin_name', None)
+        return redirect(f'/portal/{tenant.schema_name}/login/')
+    return redirect('/')
+
+
+def school_dashboard(request, schema_name):
+    tenant = get_school_tenant(schema_name)
+    if not tenant:
+        return HttpResponseNotFound('School portal not found.')
+
+    if request.session.get('school_admin_authenticated') is not True or request.session.get('school_admin_schema') != tenant.schema_name:
+        return redirect(f'/portal/{tenant.schema_name}/login/')
+
+    return render(request, 'tenant/dashboard.html', {
+        'tenant': tenant,
+    })
 
 urlpatterns = [
-    path('', public_root, name='saas_home'),
+    path('', saas_homepage, name='saas_home'),
     path('admin/', admin.site.urls),
-    path('<path:path>', tenant_public_dispatch),
+    path('portal/<slug:schema_name>/', school_dashboard, name='school_portal'),
+    path('portal/<slug:schema_name>/login/', school_login, name='school_portal_login'),
+    path('portal/<slug:schema_name>/logout/', school_logout, name='school_portal_logout'),
 ]

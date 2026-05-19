@@ -91,7 +91,7 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
 
     def school_admin_portal_url(self, obj):
         if obj.pk and obj.schema_name != 'public':
-            target_url = f"http://{obj.schema_name}.localhost:8000/portal/"
+            target_url = f"http://localhost:8000/portal/{obj.schema_name}/"
             return mark_safe(f'<a href="{target_url}" target="_blank" style="background: #10b981; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">🚀 Open {obj.name} School Portal</a>')
         return "Link will be generated automatically after you click Save below."
     
@@ -99,7 +99,7 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
     
     def get_admin_url_link(self, obj):
         if obj.schema_name != 'public':
-            target_url = f"http://{obj.schema_name}.localhost:8000/portal/"
+            target_url = f"http://localhost:8000/portal/{obj.schema_name}/"
             return mark_safe(f'<a href="{target_url}" target="_blank" style="color: #38bdf8; font-weight: bold;">Open School Portal</a>')
         return "MASTER NODE"
     get_admin_url_link.short_description = "Quick Portal Link"
