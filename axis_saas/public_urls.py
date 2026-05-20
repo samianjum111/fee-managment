@@ -183,8 +183,8 @@ def fee_generate(request, schema_name, tenant=None):
     if request.method == 'POST':
         form = FeeGenerationForm(request.POST)
         if form.is_valid():
-            month = form.cleaned_data['month']
-            year = form.cleaned_data['year']
+            month = int(form.cleaned_data['month'])
+            year = int(form.cleaned_data['year'])
             generate_all = form.cleaned_data['generate_for_all']
             with schema_context(tenant.schema_name):
                 students = Student.objects.filter(status='active')
@@ -372,11 +372,10 @@ def fee_receipt(request, schema_name, receipt_id, tenant=None):
 
 @tenant_login_required
 def fee_settings(request, schema_name, tenant=None):
-    # SchoolFeeSettings lives in public schema (shared), so query outside tenant schema
+    # SchoolFeeSettings lives in public schema only
     from django_tenants.utils import schema_context
     with schema_context('public'):
-                    settings_obj, created = SchoolFeeSettings.objects.get_or_create(tenant=tenant)
-    with schema_context(tenant.schema_name):
+        settings_obj, created = SchoolFeeSettings.objects.get_or_create(tenant=tenant)
         if request.method == 'POST':
             form = FeeSettingsForm(request.POST, instance=settings_obj)
             if form.is_valid():
