@@ -16,29 +16,78 @@
     </div>
 </div>
 
-<div class="page-card" style="padding: 0; overflow: hidden;">
-    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+<!-- Filter Form -->
+<div class="page-card" style="margin-bottom: 20px;">
+    <form method="get" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+        <div class="field-card" style="margin: 0;">
+            <label>Grade/Class</label>
+            <select name="grade" style="width: 150px;">
+                <option value="">All</option>
+                {% for g in grades %}
+                <option value="{{ g }}" {% if request.GET.grade == g %}selected{% endif %}>{{ g }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field-card" style="margin: 0;">
+            <label>Section</label>
+            <select name="section" style="width: 120px;">
+                <option value="">All</option>
+                {% for s in sections %}
+                <option value="{{ s }}" {% if request.GET.section == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field-card" style="margin: 0;">
+            <label>Status</label>
+            <select name="status" style="width: 130px;">
+                <option value="">All</option>
+                {% for key, val in status_choices %}
+                <option value="{{ key }}" {% if request.GET.status == key %}selected{% endif %}>{{ val }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field-card" style="margin: 0; flex-direction: row; gap: 8px;">
+            <button type="submit" style="background: var(--primary); padding: 8px 16px;">Filter</button>
+            <a href="{% url 'school_portal_students' schema_name=tenant.schema_name %}" style="background: var(--surface-alt); padding: 8px 16px; border-radius: 6px; text-decoration: none;">Reset</a>
+        </div>
+    </form>
+</div>
+
+<div class="page-card" style="padding: 0; overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; text-align: left; min-width: 800px;">
         <thead style="background: var(--surface-alt); border-bottom: 1px solid var(--border);">
             <tr>
-                <th style="padding: 16px; font-size: 0.85rem; color: var(--muted); text-transform: uppercase;">Roll No</th>
-                <th style="padding: 16px; font-size: 0.85rem; color: var(--muted); text-transform: uppercase;">Name</th>
-                <th style="padding: 16px; font-size: 0.85rem; color: var(--muted); text-transform: uppercase;">Grade</th>
-                <th style="padding: 16px; font-size: 0.85rem; color: var(--muted); text-transform: uppercase;">Status</th>
+                <th style="padding: 12px 16px;">Roll No</th>
+                <th style="padding: 12px 16px;">Name</th>
+                <th style="padding: 12px 16px;">Father Name</th>
+                <th style="padding: 12px 16px;">CNIC</th>
+                <th style="padding: 12px 16px;">Class</th>
+                <th style="padding: 12px 16px;">Section</th>
+                <th style="padding: 12px 16px;">Status</th>
+                <th style="padding: 12px 16px;">Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for student in students %}
             <tr style="border-bottom: 1px solid var(--border);">
-                <td style="padding: 16px; font-size: 0.9rem; font-weight: 600;">{{ student.roll_number|default:"N/A" }}</td>
-                <td style="padding: 16px; font-size: 0.9rem;">{{ student.name }}</td>
-                <td style="padding: 16px; font-size: 0.9rem;">{{ student.grade }}</td>
-                <td style="padding: 16px; font-size: 0.9rem;">
-                    <span style="background: #e6f4ea; color: #137333; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Active</span>
+                <td style="padding: 12px 16px;">{{ student.roll_number|default:"N/A" }}</td>
+                <td style="padding: 12px 16px;">{{ student.name }}</td>
+                <td style="padding: 12px 16px;">{{ student.father_name }}</td>
+                <td style="padding: 12px 16px;">{{ student.father_cnic }}</td>
+                <td style="padding: 12px 16px;">{{ student.grade }}</td>
+                <td style="padding: 12px 16px;">{{ student.section }}</td>
+                <td style="padding: 12px 16px;">
+                    <span style="background: {% if student.status == 'active' %}#e6f4ea; color:#137333{% elif student.status == 'suspended' %}#fff3e0; color:#e67e22{% else %}#fdeded; color:#c0392b{% endif %}; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
+                        {{ student.get_status_display }}
+                    </span>
+                </td>
+                <td style="padding: 12px 16px;">
+                    <a href="{% url 'student_profile' schema_name=tenant.schema_name student_id=student.id %}" style="color: var(--primary); text-decoration: underline;">View Profile</a>
                 </td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="4" style="padding: 32px; text-align: center; color: var(--muted); font-size: 0.95rem;">No students enrolled yet.</td>
+                <td colspan="8" style="padding: 32px; text-align: center;">No students found.</td>
             </tr>
             {% endfor %}
         </tbody>

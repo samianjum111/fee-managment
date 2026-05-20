@@ -1,0 +1,52 @@
+{% extends 'tenant/base.html' %}
+
+{% block title %}{{ tenant.name }} | Student Profile{% endblock %}
+
+{% block sidebar_meta %}Student Profile{% endblock %}
+{% block nav_students_active %}active{% endblock %}
+
+{% block body %}
+<div class="page-card">
+    <div class="page-head" style="margin-bottom: 20px;">
+        <div>
+            <h1 class="page-title">Student Profile</h1>
+            <p class="page-description">Complete details of {{ student.name }}</p>
+        </div>
+        <div>
+            <a href="{% url 'school_portal_students' schema_name=tenant.schema_name %}" style="background: var(--surface-alt); padding: 8px 16px; border-radius: 6px; text-decoration: none;">← Back to List</a>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+        <!-- Left column: photo if available -->
+        <div style="flex: 0 0 200px; text-align: center;">
+            {% if student.photo %}
+                <img src="{{ student.photo.url }}" alt="Student Photo" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 1px solid var(--border);">
+            {% else %}
+                <div style="width: 150px; height: 150px; background: var(--surface-alt); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 3rem; color: var(--muted);">📷</div>
+            {% endif %}
+        </div>
+
+        <!-- Right column: details -->
+        <div style="flex: 1;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+                <div><strong>Roll Number:</strong> {{ student.roll_number|default:"N/A" }}</div>
+                <div><strong>Full Name:</strong> {{ student.name }}</div>
+                <div><strong>Father's Name:</strong> {{ student.father_name }}</div>
+                <div><strong>Father CNIC:</strong> {{ student.father_cnic }}</div>
+                <div><strong>Parent Mobile:</strong> {{ student.parent_mobile }}</div>
+                <div><strong>Class:</strong> {{ student.grade }}</div>
+                <div><strong>Section:</strong> {{ student.section }}</div>
+                <div><strong>Admission Date:</strong> {{ student.admission_date|date:"Y-m-d" }}</div>
+                <div><strong>Status:</strong> {{ student.get_status_display }}</div>
+                <div><strong>Gender:</strong> {{ student.get_gender_display|default:"Not specified" }}</div>
+                <div><strong>Date of Birth:</strong> {{ student.date_of_birth|date:"Y-m-d"|default:"N/A" }}</div>
+                <div><strong>Custom Fee:</strong> Rs. {{ student.custom_fee }}</div>
+                <div><strong>Enrolled On:</strong> {{ student.enrolled_on|date:"Y-m-d H:i" }}</div>
+                <div><strong>Address:</strong> {{ student.address|linebreaks|default:"N/A" }}</div>
+                <div><strong>Notes:</strong> {{ student.notes|linebreaks|default:"N/A" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

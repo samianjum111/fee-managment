@@ -75,9 +75,35 @@ def school_dashboard(request, schema_name, tenant=None):
 
 @tenant_login_required
 def school_students_list(request, schema_name, tenant=None):
+    # Get filter parameters
+    grade_filter = request.GET.get('grade', '')
+    section_filter = request.GET.get('section', '')
+    status_filter = request.GET.get('status', '')
+    
     with schema_context(tenant.schema_name):
-        students = Student.objects.all().order_by('-id')
-    return render(request, 'tenant/students_list.html', {'tenant': tenant, 'students': students})
+        students_qs = Student.objects.all()
+        if grade_filter:
+            students_qs = students_qs.filter(grade=grade_filter)
+        if section_filter:
+            students_qs = students_qs.filter(section=section_filter)
+        if status_filter:
+            students_qs = students_qs.filter(status=status_filter)
+        students = students_qs.order_by('-enrolled_on')
+        
+        # Get distinct grades and sections for filter dropdowns
+        grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
+        sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')
+        status_choices = Student.STATUS_CHOICES
+    
+    logo_url = tenant.school_logo.url if tenant.school_logo else None
+    return render(request, 'tenant/students_list.html', {
+        'tenant': tenant,
+        'students': students,
+        'grades': grades,
+        'sections': sections,
+        'status_choices': status_choices,
+        'logo_url': logo_url,
+    })
 
 @tenant_login_required
 def school_add_student(request, schema_name, tenant=None):
@@ -102,12 +128,27 @@ def school_settings(request, schema_name, tenant=None):
     logo_url = tenant.school_logo.url if tenant.school_logo else None
     return render(request, 'tenant/settings.html', {'tenant': tenant, 'logo_url': logo_url})
 
+@tenant_login_required
+def student_profile(request, schema_name, student_id, tenant=None):
+    with schema_context(tenant.schema_name):
+        try:
+            student = Student.objects.get(id=student_id)
+        except Student.DoesNotExist:
+            return HttpResponseNotFound('Student not found')
+    logo_url = tenant.school_logo.url if tenant.school_logo else None
+    return render(request, 'tenant/student_profile.html', {
+        'tenant': tenant,
+        'student': student,
+        'logo_url': logo_url,
+    })
+
 # ----------------------------------------------------------------------
 # URL patterns
 # ----------------------------------------------------------------------
 urlpatterns = [
     path('portal/<slug:schema_name>/students/', school_students_list, name='school_portal_students'),
     path('portal/<slug:schema_name>/students/add/', school_add_student, name='school_add_student'),
+    path('portal/<slug:schema_name>/students/<int:student_id>/', student_profile, name='student_profile'),
     path('portal/<slug:schema_name>/', school_dashboard, name='school_portal'),
     path('portal/<slug:schema_name>/login/', school_login, name='school_portal_login'),
     path('portal/<slug:schema_name>/logout/', school_logout, name='school_portal_logout'),
