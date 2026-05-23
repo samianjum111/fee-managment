@@ -7,14 +7,13 @@ from django.http import Http404
 class URLPathTenantMiddleware(TenantMainMiddleware):
     """
     Custom tenant middleware: only look for tenant if the URL path starts with '/portal/'.
-    Otherwise, use the public schema.
+    Otherwise, use the public schema (tenant = None).
     """
     def __call__(self, request):
         # If request path does NOT start with /portal/, use public schema
         if not request.path_info.startswith('/portal/'):
-            # Set tenant to None (public schema) – django-tenants will handle it
             request.tenant = None
-            connection.set_schema_to_public()   # restore public schema
+            # Ensure we are using public schema (already the default)
             return self.get_response(request)
 
         # Path starts with /portal/ – extract schema_name from URL
@@ -36,5 +35,5 @@ class URLPathTenantMiddleware(TenantMainMiddleware):
             except TenantModel.DoesNotExist:
                 raise Http404("Tenant not found")
 
-        # Fallback to default domain‑based behaviour (should not be reached)
+        # If no schema_name found, fall back to domain detection
         return super().__call__(request)
