@@ -1,4 +1,5 @@
 #!/bin/bash
+mkdir -p /tmp/django_sessions/
 set -e
 
 echo "Running migrations on public schema..."
