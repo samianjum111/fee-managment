@@ -8,31 +8,62 @@ from .models import SchoolClient
 
 class TenantOnlyAdminMixin:
     def has_module_permission(self, request):
+        if request.tenant is None:
+            return False
         return request.tenant.schema_name != 'public'
+
     def has_view_permission(self, request, obj=None):
+        if request.tenant is None:
+            return False
         return request.tenant.schema_name != 'public'
+
     def has_add_permission(self, request):
+        if request.tenant is None:
+            return False
         return request.tenant.schema_name != 'public'
+
     def has_change_permission(self, request, obj=None):
+        if request.tenant is None:
+            return False
         return request.tenant.schema_name != 'public'
+
     def has_delete_permission(self, request, obj=None):
+        if request.tenant is None:
+            return False
         return request.tenant.schema_name != 'public'
+
 
 class PublicOnlyAdminMixin:
     def has_module_permission(self, request):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
+
     def has_view_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
+        # Exclude the 'public' tenant from public list (it's a special internal schema)
         return qs.exclude(schema_name='public')
+
     def has_add_permission(self, request):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
+
     def has_change_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
+
     def has_delete_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
+
 
 class SchoolClientForm(forms.ModelForm):
     class Meta:
@@ -55,6 +86,7 @@ class SchoolClientForm(forms.ModelForm):
         if not self.instance.pk and exists:
             raise ValidationError(f"⚠️ SECURITY BREACH BLOCK: The schema name '{schema}' physically exists in PostgreSQL as an active partition! Choose a unique routing path.")
         return schema
+
 
 @admin.register(SchoolClient)
 class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
@@ -83,6 +115,8 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         if obj and obj.schema_name == 'public':
             return False
+        if request.tenant is None:
+            return True   # public schema user can delete tenants
         return request.tenant.schema_name == 'public'
 
     def school_admin_portal_url(self, obj):
@@ -101,9 +135,13 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
     get_admin_url_link.short_description = "Quick Portal Link"
 
     def has_module_permission(self, request):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def has_view_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def get_queryset(self, request):
@@ -151,6 +189,7 @@ class StudentAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
             base_fields.append('roll_number')
         return tuple(base_fields)
 
+
 # --- AXIS Fee Structure Registry Injection ---
 from .models import FeeStructure
 
@@ -158,6 +197,7 @@ from .models import FeeStructure
 class FeeStructureAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
     list_display = ('grade', 'monthly_fee', 'updated_at')
     search_fields = ('grade',)
+
 
 # --- AXIS SECURITY HARDENING: MULTI-TENANT ISOLATION OVERRIDE ---
 from django.contrib.auth.models import User, Group
@@ -173,22 +213,32 @@ except admin.sites.NotRegistered:
 @admin.register(User)
 class TenantSecuredUserAdmin(BaseUserAdmin):
     def has_module_permission(self, request):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def has_view_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def has_add_permission(self, request):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def has_change_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def has_delete_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def save_model(self, request, obj, form, change):
-        if request.tenant.schema_name != 'public':
+        if request.tenant is not None and request.tenant.schema_name != 'public':
             obj.is_superuser = False
         super().save_model(request, obj, form, change)
 
@@ -196,19 +246,30 @@ class TenantSecuredUserAdmin(BaseUserAdmin):
 @admin.register(Group)
 class TenantSecuredGroupAdmin(BaseGroupAdmin):
     def has_module_permission(self, request):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def has_view_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def has_add_permission(self, request):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def has_change_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
 
     def has_delete_permission(self, request, obj=None):
+        if request.tenant is None:
+            return True
         return request.tenant.schema_name == 'public'
+
 
 # Register Fee models
 from .models import FeeRecord, PaymentTransaction, SchoolFeeSettings
