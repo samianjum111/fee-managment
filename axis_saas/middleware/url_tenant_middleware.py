@@ -5,11 +5,11 @@ from django.urls import resolve
 
 class URLPathTenantMiddleware(TenantMainMiddleware):
     """
-    Custom tenant middleware: extract schema_name from URL path.
-    If tenant record is missing, do NOT raise 404 – let the view handle creation.
+    Custom tenant middleware: extract schema_name from URL path,
+    set request.tenant, and switch the database connection to that schema.
     """
     def __call__(self, request):
-        # Non‑portal paths → public schema
+        # For non‑portal paths, stay on public schema
         if not request.path_info.startswith('/portal/'):
             request.tenant = None
             connection.set_schema_to_public()
@@ -20,19 +20,22 @@ class URLPathTenantMiddleware(TenantMainMiddleware):
         if len(parts) >= 2 and parts[0] == 'portal':
             schema_name = parts[1]
         else:
+            # Malformed path, stay on public
             request.tenant = None
+            connection.set_schema_to_public()
             return self.get_response(request)
 
         TenantModel = get_tenant_model()
         try:
+            # Query the tenant record from the public schema (default connection)
             tenant = TenantModel.objects.get(schema_name=schema_name)
             request.tenant = tenant
             connection.set_tenant(request.tenant)
         except TenantModel.DoesNotExist:
-            # No SchoolClient row yet – set a flag so the view can auto‑create it
+            # No SchoolClient row – we will let the view create it
+            # but still keep connection on public schema
             request.tenant = None
             request.missing_tenant_schema = schema_name
-            # Still proceed; we will keep connection on public schema
             connection.set_schema_to_public()
 
         return self.get_response(request)

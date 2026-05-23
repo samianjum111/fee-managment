@@ -18,20 +18,19 @@ def saas_homepage(request):
     <p>Go to <a href="/admin/">Admin Panel</a> to manage schools</p>
     ''')
 
-def school_login(request, schema_name):
-    # ---- Auto‑create missing SchoolClient if the PostgreSQL schema exists ----
+def ensure_schoolclient(schema_name):
+    """Helper to ensure a SchoolClient row exists for the given schema name."""
     try:
         tenant = SchoolClient.objects.get(schema_name=schema_name)
+        return tenant
     except SchoolClient.DoesNotExist:
         # Check if the actual PostgreSQL schema exists
         from django_tenants.utils import schema_context
         from django.db import connection
         schema_exists = False
         try:
-            # Try to set the schema (this will raise if schema doesn't exist)
             connection.set_schema(schema_name)
             schema_exists = True
-            # Reset to public
             connection.set_schema_to_public()
         except Exception:
             schema_exists = False
@@ -49,12 +48,27 @@ def school_login(request, schema_name):
             )
             if created:
                 print(f"✅ Auto-created SchoolClient for '{schema_name}'")
-            else:
-                print(f"ℹ️ SchoolClient for '{schema_name}' already exists")
+            return tenant
         else:
-            raise Http404(f"Tenant schema '{schema_name}' does not exist.")
+            return None
 
-    # ---- Process login ----
+def portal_wrapper(view_func):
+    """Wrapper that ensures SchoolClient exists before calling the view."""
+    def wrapper(request, schema_name, *args, **kwargs):
+        tenant = ensure_schoolclient(schema_name)
+        if tenant is None:
+            raise Http404(f"Tenant schema '{schema_name}' does not exist.")
+        # Store tenant in request for convenience
+        request.tenant = tenant
+        return view_func(request, schema_name, *args, **kwargs)
+    return wrapper
+
+def school_login(request, schema_name):
+    # Ensure tenant exists
+    tenant = ensure_schoolclient(schema_name)
+    if tenant is None:
+        raise Http404(f"Tenant schema '{schema_name}' does not exist.")
+
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
@@ -77,23 +91,23 @@ def login_required_for_schema(view_func):
         return view_func(request, schema_name, *args, **kwargs)
     return wrapper
 
-# Wrapped views
-dashboard_view = login_required_for_schema(dashboard)
-student_list_view = login_required_for_schema(student_list)
-student_profile_view = login_required_for_schema(student_profile)
-fee_collection_view = login_required_for_schema(fee_collection)
-fee_receipt_view = login_required_for_schema(fee_receipt)
-defaulters_view = login_required_for_schema(defaulters)
-reports_view = login_required_for_schema(reports)
-settings_view = login_required_for_schema(settings)
-fee_structure_view = login_required_for_schema(fee_structure)
-fee_settings_view = login_required_for_schema(fee_settings)
-family_payment_view = login_required_for_schema(family_payment)
-student_search_api_view = login_required_for_schema(student_search_api)
-add_student_view = login_required_for_schema(add_student)
-edit_student_view = login_required_for_schema(edit_student)
-student_fee_records_api_view = login_required_for_schema(student_fee_records_api)
-student_payments_api_view = login_required_for_schema(student_payments_api)
+# Wrap all portal views with portal_wrapper to ensure SchoolClient exists
+dashboard_view = portal_wrapper(login_required_for_schema(dashboard))
+student_list_view = portal_wrapper(login_required_for_schema(student_list))
+student_profile_view = portal_wrapper(login_required_for_schema(student_profile))
+fee_collection_view = portal_wrapper(login_required_for_schema(fee_collection))
+fee_receipt_view = portal_wrapper(login_required_for_schema(fee_receipt))
+defaulters_view = portal_wrapper(login_required_for_schema(defaulters))
+reports_view = portal_wrapper(login_required_for_schema(reports))
+settings_view = portal_wrapper(login_required_for_schema(settings))
+fee_structure_view = portal_wrapper(login_required_for_schema(fee_structure))
+fee_settings_view = portal_wrapper(login_required_for_schema(fee_settings))
+family_payment_view = portal_wrapper(login_required_for_schema(family_payment))
+student_search_api_view = portal_wrapper(login_required_for_schema(student_search_api))
+add_student_view = portal_wrapper(login_required_for_schema(add_student))
+edit_student_view = portal_wrapper(login_required_for_schema(edit_student))
+student_fee_records_api_view = portal_wrapper(login_required_for_schema(student_fee_records_api))
+student_payments_api_view = portal_wrapper(login_required_for_schema(student_payments_api))
 
 urlpatterns = [
     path('api/debug-payments/', debug_payments_api, name='debug_payments_api'),
