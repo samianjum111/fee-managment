@@ -1283,21 +1283,17 @@ def gym_edit_attendance(request, schema_name, attendance_id):
         tenant = get_tenant(request, schema_name)
         with schema_context(schema_name):
             attendance = get_object_or_404(GymAttendance, id=attendance_id)
-            if not attendance.is_editable():
-                return JsonResponse({'error': 'Not editable (older than 7 hours)'}, status=400)
             data = {
                 'check_in': attendance.check_in.isoformat() if attendance.check_in else '',
                 'check_out': attendance.check_out.isoformat() if attendance.check_out else '',
                 'notes': attendance.notes or '',
-                'editable': attendance.is_editable()
+                'editable': True  # Always editable
             }
             return JsonResponse(data)
     elif request.method == 'POST':
         tenant = get_tenant(request, schema_name)
         with schema_context(schema_name):
             attendance = get_object_or_404(GymAttendance, id=attendance_id)
-            if not attendance.is_editable():
-                return JsonResponse({'error': 'Not editable (older than 7 hours)'}, status=400)
             form = AttendanceEditForm(request.POST, instance=attendance)
             if form.is_valid():
                 form.save()
@@ -1305,7 +1301,6 @@ def gym_edit_attendance(request, schema_name, attendance_id):
             else:
                 return JsonResponse({'errors': form.errors}, status=400)
 
-# API endpoints for checkin/checkout
 @csrf_exempt
 @require_http_methods(["POST"])
 @csrf_exempt

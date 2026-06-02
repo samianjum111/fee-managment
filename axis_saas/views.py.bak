@@ -1308,6 +1308,8 @@ def gym_edit_attendance(request, schema_name, attendance_id):
 # API endpoints for checkin/checkout
 @csrf_exempt
 @require_http_methods(["POST"])
+@csrf_exempt
+@require_http_methods(["POST"])
 def gym_checkin_api(request):
     if not request.session.get('school_admin_authenticated'):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -1324,14 +1326,24 @@ def gym_checkin_api(request):
     with schema_context(schema_name):
         from .models import GymCustomer, GymAttendance, GymSubscription
         from datetime import date
+        from django.utils import timezone
         customer = get_object_or_404(GymCustomer, id=customer_id)
         today = date.today()
         has_paid = customer.subscriptions.filter(month=today.month, year=today.year, status='paid').exists()
         if not has_paid:
             return JsonResponse({"error": "No active paid subscription for current month. Please renew subscription first."}, status=403)
-        attendance, created = GymAttendance.objects.get_or_create(customer=customer, date=today, defaults={"check_in": timezone.now()})
-        return JsonResponse({"message": f"Check-in recorded for {customer.name}", "already_checked_in": not created})
-
+        attendance, created = GymAttendance.objects.get_or_create(
+            customer=customer, date=today,
+            defaults={"check_in": timezone.now()}
+        )
+        return JsonResponse({
+            "message": f"Check-in recorded for {customer.name}",
+            "customer_name": customer.name,
+            "customer_phone": customer.phone,
+            "check_in_time": attendance.check_in.strftime('%H:%M'),
+            "customer_id": customer.id,
+            "already_checked_in": not created
+        })
 @csrf_exempt
 @require_http_methods(["POST"])
 def gym_checkout_api(request):

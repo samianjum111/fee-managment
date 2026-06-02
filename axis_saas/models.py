@@ -299,18 +299,11 @@ class GymAttendance(models.Model):
         ordering = ['-date', '-check_in']
 
     def is_editable(self):
-        """Can edit within 7 hours of check-in or check-out (whichever is later)"""
-        from django.utils import timezone
-        now = timezone.now()
-        latest = self.check_out or self.check_in
-        if not latest:
-            return True
-        diff = now - latest
-        return diff.total_seconds() <= 7 * 3600
+        """Allow admin to edit any attendance record (no time limit)."""
+        return True
 
     def __str__(self):
         return f"{self.customer.name} - {self.date} - IN:{self.check_in.strftime('%H:%M') if self.check_in else '--'}"
-
 class GymSettings(models.Model):
     default_monthly_fee = models.DecimalField(max_digits=10, decimal_places=2, default=500.00)
     subscription_generation_day = models.PositiveSmallIntegerField(default=1)
