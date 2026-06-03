@@ -16,13 +16,35 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+
+def require_tenant_type(allowed_types):
+    def decorator(view_func):
+        def wrapper(request, schema_name, *args, **kwargs):
+            tenant = get_tenant(request, schema_name)
+            if tenant.tenant_type not in allowed_types:
+                raise Http404("Not available for this tenant type")
+            return view_func(request, schema_name, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
 from .models import SchoolClient, Student, FeeStructure, FeeRecord, PaymentTransaction, SchoolFeeSettings
 from .forms import StudentForm, FeeCollectionForm, FeeSettingsForm, FeeStructureForm, FamilyPaymentForm
+
+def local_time_str(dt):
+    """Convert aware datetime to local timezone and return formatted time string."""
+    if not dt:
+        return ''
+    from django.utils import timezone
+    local = timezone.localtime(dt)
+    return local.strftime('%H:%M')
+
 
 def get_tenant(request, schema_name):
     return get_object_or_404(SchoolClient, schema_name=schema_name)
 
 # ------------------- Dashboard -------------------
+@require_tenant_type(['school'])
 def dashboard(request, schema_name):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -64,6 +86,7 @@ def dashboard(request, schema_name):
     return render(request, 'tenant/dashboard.html', context)
 
 # ------------------- Student List -------------------
+@require_tenant_type(['school'])
 def student_list(request, schema_name):
     tenant = get_tenant(request, schema_name)
     query = request.GET.get('q', '')
@@ -97,6 +120,7 @@ def student_list(request, schema_name):
     return render(request, 'tenant/student_list.html', context)
 
 # ------------------- Student Profile -------------------
+@require_tenant_type(['school'])
 def student_profile(request, schema_name, student_id):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -115,6 +139,7 @@ def student_profile(request, schema_name, student_id):
     }
     return render(request, 'tenant/student_profile.html', context)
 
+@require_tenant_type(['school'])
 def fee_receipt(request, schema_name, receipt_id):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -127,6 +152,7 @@ def fee_receipt(request, schema_name, receipt_id):
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
     return render(request, 'tenant/receipt.html', context)
+@require_tenant_type(['school'])
 def defaulters(request, schema_name):
     tenant = get_tenant(request, schema_name)
     days = request.GET.get('days', '0')
@@ -156,6 +182,7 @@ def defaulters(request, schema_name):
     return render(request, 'tenant/defaulters.html', context)
 
 # ------------------- Reports -------------------
+@require_tenant_type(['school'])
 def reports(request, schema_name):
     tenant = get_tenant(request, schema_name)
     report_type = request.GET.get('type', 'collection')
@@ -295,6 +322,7 @@ def reports(request, schema_name):
         }
     return render(request, 'tenant/reports.html', context)
 
+@require_tenant_type(['school'])
 def fee_collection(request, schema_name, student_id=None):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -440,6 +468,7 @@ def debug_payments_api(request):
         return JsonResponse({'payments': data, 'total': PaymentTransaction.objects.count()})
 
 # ------------------- Settings -------------------
+@require_tenant_type(['school'])
 def settings(request, schema_name):
     tenant = get_tenant(request, schema_name)
     if request.method == 'POST':
@@ -466,6 +495,7 @@ def settings(request, schema_name):
     return render(request, 'tenant/settings.html', context)
 
 # ------------------- Fee Structure -------------------
+@require_tenant_type(['school'])
 def fee_structure(request, schema_name):
     tenant = get_tenant(request, schema_name)
     edit_grade = request.GET.get('edit', '')
@@ -508,6 +538,7 @@ def fee_structure(request, schema_name):
     }
     return render(request, 'tenant/fee_structure.html', context)
 # ------------------- Fee Settings -------------------
+@require_tenant_type(['school'])
 def fee_settings(request, schema_name):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -524,6 +555,7 @@ def fee_settings(request, schema_name):
     return render(request, 'tenant/fee_settings.html', context)
 
 # ------------------- Family Payment -------------------
+@require_tenant_type(['school'])
 def family_payment(request, schema_name):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -580,6 +612,7 @@ def family_payment(request, schema_name):
     return render(request, 'tenant/family_payment.html', context)
 
 # ------------------- API: Student Search -------------------
+@require_tenant_type(['school'])
 def student_search_api(request, schema_name):
     q = request.GET.get("q", "")
     with schema_context(schema_name):
@@ -591,6 +624,7 @@ def student_search_api(request, schema_name):
 
 
 # ------------------- Add Student -------------------
+@require_tenant_type(['school'])
 def add_student(request, schema_name):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -616,6 +650,7 @@ def add_student(request, schema_name):
 
 
 # ------------------- Edit Student -------------------
+@require_tenant_type(['school'])
 def edit_student(request, schema_name, student_id):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -760,6 +795,7 @@ def manual_generate_single_api(request):
 
 
 # ------------------- API: Student Fee Records (JSON) -------------------
+@require_tenant_type(['school'])
 def student_fee_records_api(request, schema_name, student_id):
     """Return fee records for a student as JSON."""
     tenant = get_tenant(request, schema_name)
@@ -781,6 +817,7 @@ def student_fee_records_api(request, schema_name, student_id):
 
 
 # ------------------- API: Student Payment History (JSON) -------------------
+@require_tenant_type(['school'])
 def student_payments_api(request, schema_name, student_id):
     """Return payment transactions for a student as JSON."""
     tenant = get_tenant(request, schema_name)
@@ -802,6 +839,7 @@ def student_payments_api(request, schema_name, student_id):
 
 # ==================== GYM VIEWS ====================
 
+@require_tenant_type(['gym'])
 def gym_dashboard(request, schema_name):
     tenant = get_tenant(request, schema_name)
     from .models import GymCustomer, GymPayment, GymAttendance, GymSubscription
@@ -833,6 +871,7 @@ def gym_dashboard(request, schema_name):
         }
     return render(request, 'tenant/gym_dashboard.html', context)
 
+@require_tenant_type(['gym'])
 def gym_customer_list(request, schema_name):
     tenant = get_tenant(request, schema_name)
     query = request.GET.get('q', '')
@@ -852,6 +891,7 @@ def gym_customer_list(request, schema_name):
         context = {'tenant': tenant, 'customers': customers, 'status_choices': status_choices, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
     return render(request, 'tenant/gym_customer_list.html', context)
 
+@require_tenant_type(['gym'])
 def gym_customer_add(request, schema_name):
     tenant = get_tenant(request, schema_name)
     from .forms import GymCustomerForm
@@ -867,6 +907,7 @@ def gym_customer_add(request, schema_name):
         context = {'tenant': tenant, 'form': form, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
     return render(request, 'tenant/gym_customer_form.html', context)
 
+@require_tenant_type(['gym'])
 def gym_customer_edit(request, schema_name, customer_id):
     tenant = get_tenant(request, schema_name)
     from .forms import GymCustomerForm
@@ -884,6 +925,7 @@ def gym_customer_edit(request, schema_name, customer_id):
         context = {'tenant': tenant, 'form': form, 'customer': customer, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
     return render(request, 'tenant/gym_customer_form.html', context)
 
+@require_tenant_type(['gym'])
 def gym_customer_profile(request, schema_name, customer_id):
     tenant = get_tenant(request, schema_name)
     from .models import GymCustomer, GymSubscription, GymPayment, GymAttendance
@@ -909,11 +951,13 @@ def gym_customer_profile(request, schema_name, customer_id):
 # --------------------------------------------------------------
 # FIXED GYM ATTENDANCE VIEW – uses timezone.localdate(), shows only eligible customers
 # --------------------------------------------------------------
+@require_tenant_type(['gym'])
 def gym_attendance(request, schema_name):
     """Professional attendance page – now only renders template; data via APIs."""
     tenant = get_tenant(request, schema_name)
     context = {'tenant': tenant, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
     return render(request, 'tenant/gym_attendance.html', context)
+@require_tenant_type(['gym'])
 def gym_payment(request, schema_name, customer_id=None):
     tenant = get_tenant(request, schema_name)
     from .models import GymCustomer, GymSubscription, GymPayment
@@ -983,6 +1027,7 @@ def gym_payment(request, schema_name, customer_id=None):
         }
     return render(request, 'tenant/gym_payment.html', context)
 
+@require_tenant_type(['gym'])
 def gym_reports(request, schema_name):
     """Main reports page – loads initial context, then JS fetches data via APIs."""
     tenant = get_tenant(request, schema_name)
@@ -1010,6 +1055,7 @@ def gym_reports(request, schema_name):
         }
     return render(request, 'tenant/gym_reports.html', context)
 
+@require_tenant_type(['gym'])
 def gym_settings(request, schema_name):
     tenant = get_tenant(request, schema_name)
     from .models import GymSettings
@@ -1027,6 +1073,7 @@ def gym_settings(request, schema_name):
         context = {'tenant': tenant, 'form': form, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
     return render(request, 'tenant/gym_settings.html', context)
 
+@require_tenant_type(['gym'])
 def gym_receipt(request, schema_name, receipt_id):
     tenant = get_tenant(request, schema_name)
     from .models import GymPayment
@@ -1042,6 +1089,7 @@ def gym_receipt(request, schema_name, receipt_id):
     return render(request, 'tenant/gym_receipt.html', context)
 
 # Subscription generation and cancellation
+@require_tenant_type(['gym'])
 def gym_generate_subscription(request, schema_name, customer_id):
     from django.http import JsonResponse
     from .models import GymCustomer, GymSubscription, GymSettings
@@ -1102,6 +1150,7 @@ def gym_generate_subscription(request, schema_name, customer_id):
         customer.save()
         return JsonResponse({'message': f'Subscription generated for {len(generated)} month(s): {", ".join(generated)}'})
 
+@require_tenant_type(['gym'])
 def gym_cancel_subscription(request, schema_name, subscription_id):
     from django.http import JsonResponse
     from .models import GymSubscription, GymPayment
@@ -1150,6 +1199,7 @@ def gym_cancel_subscription(request, schema_name, subscription_id):
         return JsonResponse({'message': f'Subscription cancelled. Refund amount: ₹{refund}', 'refund': float(refund)})
 
 @csrf_exempt
+@require_tenant_type(['gym'])
 def gym_edit_attendance(request, schema_name, attendance_id):
     """GET: return attendance data; POST: update attendance."""
     if not request.session.get('school_admin_authenticated'):
@@ -1159,6 +1209,9 @@ def gym_edit_attendance(request, schema_name, attendance_id):
         from .models import GymAttendance
         from .forms import AttendanceEditForm
         attendance = get_object_or_404(GymAttendance, id=attendance_id)
+        # Enforce 7-hour edit window
+        if not attendance.is_editable():
+            return JsonResponse({'error': 'Edit window expired (only allowed within 7 hours of check-in)'}, status=403)
         if request.method == 'GET':
             data = {
                 'check_in': attendance.check_in.isoformat(),
@@ -1253,6 +1306,7 @@ def gym_checkout_api(request):
             "attendance_id": attendance.id,
             "duration": f"{int(duration//60)}h {int(duration%60)}m"
         })
+@require_tenant_type(['gym'])
 def gym_reports(request, schema_name):
     """Main reports page – loads initial context, then JS fetches data via APIs."""
     tenant = get_tenant(request, schema_name)
@@ -1283,6 +1337,7 @@ def gym_reports(request, schema_name):
     return render(request, 'tenant/gym_reports.html', context)
 
 @csrf_exempt
+@require_tenant_type(['gym'])
 def gym_revenue_stats_api(request, schema_name):
     """API: revenue stats for given date range and grouping (day/month)."""
     if not request.session.get('school_admin_authenticated'):
@@ -1336,6 +1391,7 @@ def gym_revenue_stats_api(request, schema_name):
         })
 
 @csrf_exempt
+@require_tenant_type(['gym'])
 def gym_attendance_stats_api(request, schema_name):
     """API: attendance stats for date range."""
     if not request.session.get('school_admin_authenticated'):
@@ -1389,6 +1445,7 @@ def gym_attendance_stats_api(request, schema_name):
         })
 
 @csrf_exempt
+@require_tenant_type(['gym'])
 def gym_customers_list_api(request, schema_name):
     """API: list of all customers with basic stats (total paid, pending, attendance count)."""
     if not request.session.get('school_admin_authenticated'):
@@ -1423,6 +1480,7 @@ def gym_customers_list_api(request, schema_name):
         return JsonResponse(data, safe=False)
 
 @csrf_exempt
+@require_tenant_type(['gym'])
 def gym_customer_detail_api(request, schema_name, customer_id):
     """API: detailed info for a single customer (payments, subscriptions, attendance)."""
     if not request.session.get('school_admin_authenticated'):
@@ -1476,6 +1534,7 @@ def gym_customer_detail_api(request, schema_name, customer_id):
         })
 
 @csrf_exempt
+@require_tenant_type(['gym'])
 def gym_subscription_status_api(request, schema_name):
     """API: subscription status summary and list."""
     if not request.session.get('school_admin_authenticated'):
@@ -1513,6 +1572,7 @@ def gym_subscription_status_api(request, schema_name):
 
 # ========== NEW PROFESSIONAL ATTENDANCE APIS ==========
 @csrf_exempt
+@require_tenant_type(['gym'])
 def gym_attendance_data_api(request, schema_name):
     """Returns active check-ins, today's history, and stats."""
     if not request.session.get('school_admin_authenticated'):
@@ -1529,7 +1589,7 @@ def gym_attendance_data_api(request, schema_name):
             'customer_id': a.customer.id,
             'customer_name': a.customer.name,
             'customer_phone': a.customer.phone,
-            'check_in_time': a.check_in.strftime('%H:%M'),
+            'check_in_time': local_time_str(a.check_in),
             'check_in_raw': a.check_in.isoformat(),
         } for a in active_qs]
         # Today's history (checked out)
@@ -1544,8 +1604,8 @@ def gym_attendance_data_api(request, schema_name):
                 'id': a.id,
                 'customer_name': a.customer.name,
                 'customer_phone': a.customer.phone,
-                'check_in_time': a.check_in.strftime('%H:%M'),
-                'check_out_time': a.check_out.strftime('%H:%M'),
+                'check_in_time': local_time_str(a.check_in),
+                'check_out_time': local_time_str(a.check_out),
                 'duration': duration,
                 'notes': a.notes or '',
             })
@@ -1564,6 +1624,7 @@ def gym_attendance_data_api(request, schema_name):
 
 @csrf_exempt
 
+@require_tenant_type(['gym'])
 def gym_eligible_customers_api(request, schema_name):
     """Returns customers who can check in today (paid subscription + not already checked in)."""
     if not request.session.get('school_admin_authenticated'):
@@ -1582,6 +1643,7 @@ def gym_eligible_customers_api(request, schema_name):
         return JsonResponse(data, safe=False)
 
 @csrf_exempt
+@require_tenant_type(['gym'])
 def gym_search_customer_api(request, schema_name):
     """Search customers by barcode, phone, or name."""
     if not request.session.get('school_admin_authenticated'):
@@ -1599,6 +1661,7 @@ def gym_search_customer_api(request, schema_name):
         return JsonResponse(data, safe=False)
 
 @csrf_exempt
+@require_tenant_type(['gym'])
 def gym_export_attendance_api(request, schema_name):
     """Export today's attendance as CSV."""
     if not request.session.get('school_admin_authenticated'):

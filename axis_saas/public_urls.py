@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, re_path, include
 from django.conf import settings as django_settings
 from django.conf.urls.static import static
-from django.http import HttpResponse, Http404
+from django.http import HttpResponse, Http404, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 
 from .models import SchoolClient
@@ -117,6 +117,27 @@ gym_reports_view = portal_wrapper(login_required_for_schema(gym_reports))
 gym_settings_view = portal_wrapper(login_required_for_schema(gym_settings))
 
 
+
+def api_gym_edit_attendance(request, attendance_id):
+    """Wrapper for gym_edit_attendance that reads schema_name from session."""
+    schema_name = request.session.get("school_admin_schema")
+    if not schema_name:
+        return JsonResponse({"error": "Unauthorized or no tenant"}, status=401)
+    return gym_edit_attendance(request, schema_name, attendance_id)
+
+
+
+def tenant_root_redirect(request, schema_name):
+    """Redirect to appropriate dashboard based on tenant_type."""
+    tenant = ensure_schoolclient(schema_name)
+    if tenant is None:
+        raise Http404("Tenant not found")
+    if tenant.tenant_type == 'gym':
+        return redirect('gym_dashboard', schema_name=schema_name)
+    else:
+        return redirect('dashboard', schema_name=schema_name)
+
+
 urlpatterns = [
     # ===== GYM ROUTES (FIXED ORDER) =====
     path('portal/<slug:schema_name>/gym/customers/<int:customer_id>/generate-subscription/', portal_wrapper(login_required_for_schema(gym_generate_subscription)), name='gym_generate_subscription'),
@@ -137,7 +158,7 @@ urlpatterns = [
     path('portal/<slug:schema_name>/logout/', school_logout, name='tenant_logout'),
     
     # Core - using the wrapped views
-    path('portal/<slug:schema_name>/', dashboard_view, name='dashboard'),
+    
     path('portal/<slug:schema_name>/students/', student_list_view, name='student_list'),
     path('portal/<slug:schema_name>/students/add/', add_student_view, name='add_student'),
     path('portal/<slug:schema_name>/students/edit/<int:student_id>/', edit_student_view, name='edit_student'),
@@ -189,5 +210,6 @@ urlpatterns = [
 
     path('api/gym/export-attendance/<slug:schema_name>/', gym_export_attendance_api, name='gym_export_attendance_api'),
 
-    path('api/gym/attendance/<int:attendance_id>/edit/', gym_edit_attendance, name='gym_edit_attendance_api'),
+    path('api/gym/attendance/<int:attendance_id>/edit/', api_gym_edit_attendance, name='gym_edit_attendance_api'),
+    path('portal/<slug:schema_name>/', tenant_root_redirect, name='tenant_root'),
 ]

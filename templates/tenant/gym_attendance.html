@@ -74,6 +74,9 @@
     <!-- Today's History (Checked Out) -->
     <div class="checkin-panel">
         <h3>Today's History</h3>
+        <div style="margin-bottom: 1rem;">
+            <input type="text" id="searchHistory" placeholder="🔍 Search by name or phone..." class="search-input" style="width: 300px;">
+        </div>
         <div class="table-responsive">
             <table class="history-table" id="historyTable">
                 <thead><tr><th>Customer</th><th>Check-in</th><th>Check-out</th><th>Duration</th><th>Notes</th><th></th></tr></thead>
@@ -343,5 +346,22 @@
             return m;
         });
     }
+
+    // Search filter for Today's History
+    const searchHistoryInput = document.getElementById('searchHistory');
+    if (searchHistoryInput) {
+        searchHistoryInput.addEventListener('keyup', function() {
+            const filter = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#historyTableBody tr');
+            rows.forEach(row => {
+                const nameCell = row.cells[0];
+                if (nameCell) {
+                    const text = nameCell.innerText.toLowerCase();
+                    row.style.display = text.includes(filter) ? '' : 'none';
+                }
+            });
+        });
+    }
+
 </script>
 {% endblock %}
