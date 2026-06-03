@@ -2,11 +2,14 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.contrib import messages
 from django.db.models import Sum, Q
+from django.db.models.functions import TruncMonth, TruncDay
+from django.db.models import Count
 from django.core.paginator import Paginator
 from django.db import connection
 from django_tenants.utils import schema_context
 from decimal import Decimal
 from datetime import date, timedelta
+from collections import defaultdict
 import json
 from functools import wraps
 from django.views.decorators.csrf import csrf_exempt
@@ -966,18 +969,38 @@ def gym_attendance(request, schema_name):
 
     # GET request – render page
     with schema_context(schema_name):
+        from django.utils import timezone
         today = timezone.localdate()
-        # Customers eligible for check-in: active, paid subscription for current month, and no attendance today
+        print(f"[ATTENDANCE DEBUG] Today's date: {today}")
+
+        # Attempt to get active check-ins using the date field
+        active_checkins = GymAttendance.objects.filter(date=today, check_out__isnull=True).select_related('customer').order_by('-check_in')
+        print(f"[ATTENDANCE DEBUG] Found {active_checkins.count()} active check-ins using date field")
+
+        # If none found, try using check_in date and fix the date field
+        if active_checkins.count() == 0:
+            # Look for any check-ins without checkout that happened today (local date)
+            for att in GymAttendance.objects.filter(check_out__isnull=True):
+                att_local_date = timezone.localdate(att.check_in)
+                if att_local_date == today:
+                    print(f"[ATTENDANCE DEBUG] Found active attendance {att.id} with check_in {att.check_in} -> local date {att_local_date}")
+                    # Fix its date field
+                    att.date = att_local_date
+                    att.save(update_fields=['date'])
+                    # Re-query active check-ins
+                    active_checkins = GymAttendance.objects.filter(date=today, check_out__isnull=True).select_related('customer')
+                    break
+
+        # Completed check-ins (checked in and checked out today)
+        completed_today = GymAttendance.objects.filter(date=today, check_out__isnull=False).select_related('customer').order_by('-check_out')
+
         customers_with_paid = []
         for c in GymCustomer.objects.filter(status='active'):
             if c.subscriptions.filter(month=today.month, year=today.year, status='paid').exists():
                 if not GymAttendance.objects.filter(customer=c, date=today).exists():
                     customers_with_paid.append(c)
 
-        # Active check-ins (checked in today but not checked out)
-        active_checkins = GymAttendance.objects.filter(date=today, check_out__isnull=True).select_related('customer').order_by('-check_in')
-        # Completed check-ins (checked in and checked out today)
-        completed_today = GymAttendance.objects.filter(date=today, check_out__isnull=False).select_related('customer').order_by('-check_out')
+        print(f"[ATTENDANCE DEBUG] Customers with paid subscription (not checked in today): {len(customers_with_paid)}")
 
         context = {
             'tenant': tenant,
@@ -1287,6 +1310,7 @@ def gym_checkin_api(request):
             "customer_id": customer.id,
             "already_checked_in": not created
         })
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def gym_checkout_api(request):
@@ -1317,14 +1341,12 @@ def gym_checkout_api(request):
             return JsonResponse({"error": "Already checked out"}, status=400)
         attendance.check_out = timezone.now()
         attendance.save()
-        return JsonResponse({"message": f"Check-out recorded for {customer.name}"})
-
-# ==================== GYM REPORTS (MEGA VERSION) ====================
-import json
-from datetime import datetime, timedelta
-from django.db.models import Count, Sum, Q
-from django.db.models.functions import TruncMonth, TruncDay
-from collections import defaultdict
+        return JsonResponse({
+            "message": f"Check-out recorded for {customer.name}",
+            "customer_name": customer.name,
+            "customer_phone": customer.phone,
+            "attendance_id": attendance.id
+        })
 
 def gym_reports(request, schema_name):
     """Main reports page – loads initial context, then JS fetches data via APIs."""

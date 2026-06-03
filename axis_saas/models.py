@@ -288,19 +288,29 @@ class GymPayment(models.Model):
 
 class GymAttendance(models.Model):
     customer = models.ForeignKey(GymCustomer, on_delete=models.CASCADE, related_name='attendances')
-    date = models.DateField(default=date.today)
+    date = models.DateField(default=timezone.localdate)
     check_in = models.DateTimeField(default=timezone.now)
     check_out = models.DateTimeField(blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)   # for edit window
+
+
+    def save(self, *args, **kwargs):
+        # Ensure date matches the check_in local date
+        if self.check_in and not self.date:
+            from django.utils import timezone
+            self.date = timezone.localdate(self.check_in)
+        super().save(*args, **kwargs)
+
 
     class Meta:
         unique_together = ['customer', 'date']
         ordering = ['-date', '-check_in']
 
     def is_editable(self):
-        """Allow admin to edit any attendance record (no time limit)."""
-        return True
+        """Allow editing only within 7 hours after check-in."""
+        from django.utils import timezone
+        return (timezone.now() - self.check_in).total_seconds() <= 7 * 3600
 
     def __str__(self):
         return f"{self.customer.name} - {self.date} - IN:{self.check_in.strftime('%H:%M') if self.check_in else '--'}"

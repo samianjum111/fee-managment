@@ -352,7 +352,7 @@ async function loadCustomers() {
             <td>₹${c.total_paid.toFixed(2)}</td>
             <td>₹${c.pending.toFixed(2)}</td>
             <td>${c.attendance_count}</td>
-            <td><button class="btn-sm view-customer" data-id="${c.id}">View</button></td>
+            <td><button class="btn-sm view-customer" data-id="${c.id}">View</button> <a href="/portal/${schema}/gym/customers/${c.id}/" class="btn-sm">Profile</a></td>
         </tr>
     `).join('');
     document.querySelectorAll('.view-customer').forEach(btn => btn.addEventListener('click', () => showCustomerDetail(btn.dataset.id)));
