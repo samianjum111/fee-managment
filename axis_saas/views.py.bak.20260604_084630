@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse, Http404
+from django.http import JsonResponse
 from django.contrib import messages
 from django.db.models import Sum, Q, Exists, OuterRef
 from django.db.models.functions import TruncMonth, TruncDay
@@ -125,11 +125,6 @@ def student_profile(request, schema_name, student_id):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
         student = get_object_or_404(Student, id=student_id)
-        
-        from datetime import date
-        today = date.today()
-        current_month = today.month
-        current_year = today.year
         fee_records_qs = student.fee_records.all().order_by('-year', '-month')
         total_fee = fee_records_qs.aggregate(Sum('amount'))['amount__sum'] or 0
         fee_records = list(fee_records_qs)
@@ -140,8 +135,6 @@ def student_profile(request, schema_name, student_id):
     context = {
         'tenant': tenant, 'student': student, 'fee_records': fee_records, 'payments': payments,
         'total_fee': total_fee, 'total_paid': total_paid, 'pending_total': pending_total,
-        'current_month': current_month,
-        'current_year': current_year,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
     return render(request, 'tenant/student_profile.html', context)
@@ -374,7 +367,7 @@ def fee_collection(request, schema_name, student_id=None):
                     )
                     payment.fee_records.set(paid_records)
                     messages.success(request, f"Payment of ₹{amount} received. Receipt: {payment.receipt_number}")
-                    return redirect('fee_receipt', schema_name=schema_name, receipt_id=payment.id)
+                    return redirect('fee_collection', schema_name=schema_name, student_id=student.id)
                 except Student.DoesNotExist:
                     messages.error(request, "Student not found")
                 except Exception as e:
@@ -760,8 +753,6 @@ def manual_generate_api(request):
 # ------------------- API: Manual Generate for Single Student -------------------
 @csrf_exempt
 @require_http_methods(["POST"])
-
-
 def manual_generate_single_api(request):
     if not request.session.get("school_admin_authenticated"):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -769,10 +760,8 @@ def manual_generate_single_api(request):
     if not schema_name:
         return JsonResponse({"error": "No tenant schema"}, status=400)
     student_id = request.GET.get("student_id") or request.POST.get("student_id")
-    custom_amount = request.POST.get("custom_amount") or request.GET.get("custom_amount")
     if not student_id:
         return JsonResponse({"error": "Student ID required"}, status=400)
-    print(f"[DEBUG] manual_generate_single_api called for student {student_id}, custom_amount={custom_amount}")
     try:
         tenant = SchoolClient.objects.get(schema_name=schema_name)
     except SchoolClient.DoesNotExist:
@@ -786,341 +775,83 @@ def manual_generate_single_api(request):
         today = timezone.localdate()
         month = today.month
         year = today.year
-        
-        existing_record = FeeRecord.objects.filter(student=student, month=month, year=year).first()
-        
-        # If record exists and has any paid amount, prevent modification
-        if existing_record and existing_record.paid_amount > 0:
-            return JsonResponse({
-                "error": f"Fee already exists for {month}/{year} with paid amount ₹{existing_record.paid_amount}. Cannot modify."
-            }, status=400)
-        
-        # Determine fee amount
-        if custom_amount:
-            try:
-                base_fee = Decimal(custom_amount)
-                if base_fee <= 0:
-                    raise ValueError
-            except:
-                return JsonResponse({"error": "Invalid custom amount"}, status=400)
-        else:
-            base_fee = student.custom_fee if student.custom_fee > 0 else 0
-            if base_fee == 0:
-                fee_struct = FeeStructure.objects.filter(grade=student.grade).first()
-                if fee_struct:
-                    base_fee = fee_struct.monthly_fee
-                    student.custom_fee = base_fee
-                    student.save(update_fields=["custom_fee"])
-            if base_fee <= 0:
-                return JsonResponse({"error": "No fee structure defined for this grade and no valid custom amount provided."}, status=400)
-        
+        if FeeRecord.objects.filter(student=student, month=month, year=year).exists():
+            return JsonResponse({"message": f"Fee already exists for {student.name} for {month}/{year}."})
+        base_fee = student.custom_fee if student.custom_fee > 0 else 0
+        if base_fee == 0:
+            fee_struct = FeeStructure.objects.filter(grade=student.grade).first()
+            if fee_struct:
+                base_fee = fee_struct.monthly_fee
+                student.custom_fee = base_fee
+                student.save(update_fields=["custom_fee"])
+        if base_fee <= 0:
+            return JsonResponse({"error": "No fee structure defined for this grade."}, status=400)
         due_date = today + timedelta(days=settings.due_date_offset)
-        
-        if existing_record:
-            existing_record.amount = base_fee
-            existing_record.due_date = due_date
-            existing_record.save()
-            print(f"[DEBUG] Updated fee for {student.name} to ₹{base_fee}")
-            return JsonResponse({"message": f"Fee amount updated for {student.name} for {month}/{year} to ₹{base_fee}."})
-        else:
-            FeeRecord.objects.create(
-                student=student, month=month, year=year,
-                amount=base_fee, due_date=due_date, status="pending"
-            )
-            print(f"[DEBUG] Created fee for {student.name} with amount ₹{base_fee}")
-            return JsonResponse({"message": f"Fee record created for {student.name} for {month}/{year} with amount ₹{base_fee}."})
+        FeeRecord.objects.create(
+            student=student, month=month, year=year,
+            amount=base_fee, due_date=due_date, status="pending"
+        )
+        return JsonResponse({"message": f"Fee record created for {student.name} for {month}/{year}."})
 
+
+# ------------------- API: Student Fee Records (JSON) -------------------
+@require_tenant_type(['school'])
 def student_fee_records_api(request, schema_name, student_id):
-    """API: Return JSON list of fee records for a student."""
-    from django.http import JsonResponse
-    from .models import Student
-    from django_tenants.utils import schema_context
+    """Return fee records for a student as JSON."""
+    tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
-        try:
-            student = Student.objects.get(id=student_id)
-        except Student.DoesNotExist:
-            return JsonResponse({'error': 'Student not found'}, status=404)
-        records = []
-        for fr in student.fee_records.all().order_by('-year', '-month'):
-            records.append({
-                'id': fr.id,
-                'month': fr.month,
-                'year': fr.year,
-                'amount': float(fr.amount),
-                'paid_amount': float(fr.paid_amount),
-                'status': fr.get_status_display(),
-                'due_date': fr.due_date.isoformat(),
-                'receipts': [{'id': p.id, 'number': p.receipt_number} for p in fr.payments.all()]
-            })
-        return JsonResponse(records, safe=False)
+        student = get_object_or_404(Student, id=student_id)
+        records = student.fee_records.all().order_by("-year", "-month")
+        data = [{
+            "id": r.id,
+            "month": r.month,
+            "year": r.year,
+            "amount": float(r.amount),
+            "paid_amount": float(r.paid_amount),
+            "remaining": float(r.remaining),
+            "status": r.get_status_display(),
+            "due_date": r.due_date.strftime("%Y-%m-%d"),
+            "receipts": [{"id": p.id, "number": p.receipt_number} for p in r.payments.all()]
+        } for r in records]
+        return JsonResponse(data, safe=False)
 
+
+# ------------------- API: Student Payment History (JSON) -------------------
 @require_tenant_type(['school'])
 def student_payments_api(request, schema_name, student_id):
-    """API: Return JSON list of payments for a student."""
-    from django.http import JsonResponse
-    from .models import Student
-    from django_tenants.utils import schema_context
+    """Return payment transactions for a student as JSON."""
+    tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
-        try:
-            student = Student.objects.get(id=student_id)
-        except Student.DoesNotExist:
-            return JsonResponse({'error': 'Student not found'}, status=404)
-        payments = []
-        for p in student.payments.all().order_by('-payment_date'):
-            payments.append({
-                'id': p.id,
-                'receipt_number': p.receipt_number,
-                'amount': float(p.amount),
-                'date': p.payment_date.isoformat(),
-                'mode': p.get_payment_mode_display(),
-                'url': f'/portal/{schema_name}/fee/receipt/{p.id}/'
-            })
-        return JsonResponse(payments, safe=False)
-
-@require_tenant_type(['school'])
-def student_current_fee_status_api(request, schema_name, student_id):
-    print(f"[DEBUG] student_current_fee_status_api called for student {student_id}, schema {schema_name}")
-    """API: Get current month's fee record status for a student."""
-    from django.http import JsonResponse
-    from django.utils import timezone
-    from .models import Student, FeeRecord
-    from django_tenants.utils import schema_context
-    with schema_context(schema_name):
-        try:
-            student = Student.objects.get(id=student_id)
-        except Student.DoesNotExist:
-            return JsonResponse({'error': 'Student not found'}, status=404)
-        today = timezone.localdate()
-        month = today.month
-        year = today.year
-        try:
-            record = FeeRecord.objects.get(student=student, month=month, year=year)
-            data = {
-                'exists': True,
-                'amount': float(record.amount),
-                'paid_amount': float(record.paid_amount),
-                'status': record.get_status_display(),
-                'due_date': record.due_date.isoformat(),
-                'can_edit': record.paid_amount == 0   # allow edit only if unpaid
-            }
-        except FeeRecord.DoesNotExist:
-            # Return default fee info
-            default_fee = float(student.custom_fee) if student.custom_fee > 0 else 0
-            if default_fee == 0:
-                from .models import FeeStructure
-                fee_struct = FeeStructure.objects.filter(grade=student.grade).first()
-                if fee_struct:
-                    default_fee = float(fee_struct.monthly_fee)
-            data = {
-                'exists': False,
-                'default_fee': default_fee,
-                'grade': student.grade
-            }
-        return JsonResponse(data)
-
-@require_tenant_type(['gym'])
-def gym_generate_subscription(request, schema_name, customer_id):
-    """Generate a new subscription for a gym customer (multi-month)."""
-    from django.http import JsonResponse
-    from django.utils import timezone
-    from decimal import Decimal
-    from .models import GymCustomer, GymSubscription, GymSettings
-    from datetime import date, timedelta
-    from calendar import monthrange
-    import json
-    from django_tenants.utils import schema_context
-    with schema_context(schema_name):
-        try:
-            customer = GymCustomer.objects.get(id=customer_id)
-        except GymCustomer.DoesNotExist:
-            return JsonResponse({'error': 'Customer not found'}, status=404)
-
-        if request.method != 'POST':
-            return JsonResponse({'error': 'Only POST allowed'}, status=405)
-
-        try:
-            data = json.loads(request.body)
-            months = int(data.get('months', 1))
-            monthly_fee = Decimal(str(data.get('fee', customer.monthly_fee)))
-        except (ValueError, TypeError, json.JSONDecodeError):
-            return JsonResponse({'error': 'Invalid data. Provide months and fee.'}, status=400)
-
-        if months < 1 or months > 12:
-            return JsonResponse({'error': 'Months must be between 1 and 12'}, status=400)
-
-        today = date.today()
-        settings = GymSettings.objects.first()
-        if not settings:
-            settings = GymSettings.objects.create()
-        due_offset = settings.due_date_offset
-
-        created = []
-        for i in range(months):
-            target_month = today.month + i
-            target_year = today.year
-            while target_month > 12:
-                target_month -= 12
-                target_year += 1
-
-            # Check if subscription already exists for that month
-            if GymSubscription.objects.filter(customer=customer, month=target_month, year=target_year).exists():
-                continue
-
-            # Due date: membership start day or fallback to generation day
-            due_day = customer.membership_start.day if customer.membership_start else 1
-            max_day = monthrange(target_year, target_month)[1]
-            due_day = min(due_day, max_day)
-            due_date = date(target_year, target_month, due_day) + timedelta(days=due_offset)
-
-            sub = GymSubscription.objects.create(
-                customer=customer,
-                month=target_month,
-                year=target_year,
-                amount=monthly_fee,
-                due_date=due_date,
-                status='pending'
-            )
-            created.append(sub)
-
-        if created:
-            return JsonResponse({'message': f'Generated {len(created)} subscription(s).'})
-        else:
-            return JsonResponse({'message': 'No new subscriptions created (already exist).'})
-
-@require_tenant_type(['gym'])
-def gym_cancel_subscription(request, schema_name, subscription_id):
-    """Cancel a gym subscription with partial refund calculation."""
-    from django.http import JsonResponse
-    from django.utils import timezone
-    from decimal import Decimal
-    from .models import GymSubscription
-    from datetime import date
-    from django_tenants.utils import schema_context
-    with schema_context(schema_name):
-        try:
-            sub = GymSubscription.objects.get(id=subscription_id)
-        except GymSubscription.DoesNotExist:
-            return JsonResponse({'error': 'Subscription not found'}, status=404)
-
-        if sub.is_cancelled:
-            return JsonResponse({'error': 'Already cancelled'}, status=400)
-
-        if request.method != 'POST':
-            return JsonResponse({'error': 'Only POST allowed'}, status=405)
-
-        # Calculate partial refund (unused days)
-        today = date.today()
-        month_start = date(sub.year, sub.month, 1)
-        if sub.month == 12:
-            next_month = date(sub.year+1, 1, 1)
-        else:
-            next_month = date(sub.year, sub.month+1, 1)
-        days_in_month = (next_month - month_start).days
-        days_used = max(0, (today - month_start).days)
-        if days_used >= days_in_month:
-            # Already fully into month, no refund
-            refund = Decimal('0')
-        else:
-            daily_rate = sub.amount / Decimal(days_in_month)
-            remaining_days = days_in_month - days_used
-            refund = daily_rate * Decimal(remaining_days)
-
-        sub.is_cancelled = True
-        sub.cancelled_on = today
-        sub.save()
-
-        # Optionally create a refund adjustment (negative payment) – not implemented here
-        return JsonResponse({
-            'message': f'Subscription cancelled. Refund amount (estimated): ₹{refund:.2f}',
-            'refund': float(refund)
-        })
-
-@require_tenant_type(['gym'])
-def gym_edit_attendance(request, schema_name, attendance_id):
-    """Edit an existing attendance record (within 7 hours of check-in)."""
-    from django.http import JsonResponse
-    from django.utils import timezone
-    from .models import GymAttendance
-    from django_tenants.utils import schema_context
-    import json
-    from datetime import datetime
-
-    with schema_context(schema_name):
-        try:
-            att = GymAttendance.objects.get(id=attendance_id)
-        except GymAttendance.DoesNotExist:
-            return JsonResponse({'error': 'Attendance not found'}, status=404)
-
-        if request.method == 'GET':
-            # Return current data for editing
-            return JsonResponse({
-                'id': att.id,
-                'check_in': att.check_in.isoformat() if att.check_in else '',
-                'check_out': att.check_out.isoformat() if att.check_out else '',
-                'notes': att.notes or ''
-            })
-
-        if request.method == 'POST':
-            # Check edit window
-            if not att.is_editable():
-                return JsonResponse({'error': 'Edit window expired (7 hours after check-in).'}, status=403)
-
-            try:
-                data = request.POST
-                check_in_str = data.get('check_in')
-                check_out_str = data.get('check_out')
-                notes = data.get('notes', '')
-
-                if check_in_str:
-                    att.check_in = datetime.fromisoformat(check_in_str)
-                if check_out_str:
-                    att.check_out = datetime.fromisoformat(check_out_str)
-                att.notes = notes
-                # Recalculate duration
-                if att.check_out:
-                    att.duration_minutes = int((att.check_out - att.check_in).total_seconds() / 60)
-                else:
-                    att.duration_minutes = None
-                att.save()
-                return JsonResponse({'message': 'Attendance updated successfully.'})
-            except Exception as e:
-                return JsonResponse({'error': str(e)}, status=400)
-
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        student = get_object_or_404(Student, id=student_id)
+        payments = student.payments.all().order_by("-payment_date")
+        payments = list(payments)
+        data = [{
+            "id": p.id,
+            "receipt_number": p.receipt_number,
+            "amount": float(p.amount),
+            "date": p.payment_date.strftime("%Y-%m-%d"),
+            "mode": p.get_payment_mode_display(),
+            "url": f"/portal/{schema_name}/fee/receipt/{p.id}/"
+        } for p in payments]
+        return JsonResponse(data, safe=False)
 
 
 
-# ==================== GYM VIEWS (Added by patcher) ====================
+# ==================== GYM VIEWS ====================
 
 @require_tenant_type(['gym'])
 def gym_dashboard(request, schema_name):
-    """Gym dashboard view."""
-    from django.shortcuts import render
-    from django.utils import timezone
-    from django.db.models import Sum, Count
+    tenant = get_tenant(request, schema_name)
     from .models import GymCustomer, GymPayment, GymAttendance, GymSubscription
-    from datetime import date, timedelta
-    from decimal import Decimal
-    from django_tenants.utils import schema_context
-
+    from datetime import date, timedelta, datetime
     with schema_context(schema_name):
         today = timezone.localdate()
-        # Today's check-ins
-        today_checkins = GymAttendance.objects.filter(date=today).count()
-        # Active customers count
-        active_customers = GymCustomer.objects.filter(status='active').count()
-        # Revenue this month
         first_day_month = today.replace(day=1)
-        month_revenue = GymPayment.objects.filter(payment_date__gte=first_day_month).aggregate(Sum('amount'))['amount__sum'] or Decimal(0)
-        # Expiring soon (next 7 days)
-        expiring_soon = GymCustomer.objects.filter(
-            status='active',
-            membership_end__gte=today,
-            membership_end__lte=today + timedelta(days=7)
-        ).count()
-        # Recent payments
+        today_checkins = GymAttendance.objects.filter(date=today).count()
+        active_customers = GymCustomer.objects.filter(status='active').count()
+        month_revenue = GymPayment.objects.filter(payment_date__gte=first_day_month).aggregate(Sum('amount'))['amount__sum'] or 0
+        expiring_soon = GymCustomer.objects.filter(membership_end__gte=today, membership_end__lte=today+timedelta(days=7)).count()
         recent_payments = list(GymPayment.objects.select_related('customer').order_by('-payment_date')[:5])
-        # Monthly revenue trend (last 6 months)
         months_labels = []
         months_amounts = []
         for i in range(5, -1, -1):
@@ -1132,292 +863,203 @@ def gym_dashboard(request, schema_name):
             total = GymPayment.objects.filter(payment_date__year=y, payment_date__month=m).aggregate(Sum('amount'))['amount__sum'] or 0
             months_labels.append(f"{m}/{y}")
             months_amounts.append(float(total))
-
         context = {
-            'tenant': get_tenant(request, schema_name),
-            'today_checkins': today_checkins,
-            'active_customers': active_customers,
-            'month_revenue': month_revenue,
-            'expiring_soon': expiring_soon,
-            'recent_payments': recent_payments,
-            'months_labels': months_labels,
-            'months_amounts': months_amounts,
-            'today': today,
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
+            'tenant': tenant, 'today_checkins': today_checkins, 'active_customers': active_customers,
+            'month_revenue': month_revenue, 'expiring_soon': expiring_soon,
+            'recent_payments': recent_payments, 'months_labels': months_labels, 'months_amounts': months_amounts,
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-        return render(request, 'tenant/gym_dashboard.html', context)
-
+    return render(request, 'tenant/gym_dashboard.html', context)
 
 @require_tenant_type(['gym'])
 def gym_customer_list(request, schema_name):
-    """List all gym customers."""
-    from django.shortcuts import render
-    from django.db.models import Sum
-    from .models import GymCustomer, GymSubscription
-    from django_tenants.utils import schema_context
-
+    tenant = get_tenant(request, schema_name)
+    query = request.GET.get('q', '')
+    status = request.GET.get('status', '')
     with schema_context(schema_name):
-        q = request.GET.get('q', '')
-        status_filter = request.GET.get('status', '')
+        from .models import GymCustomer
         customers = GymCustomer.objects.all()
-        if q:
-            customers = customers.filter(name__icontains=q) | customers.filter(phone__icontains=q)
-        if status_filter:
-            customers = customers.filter(status=status_filter)
-
-        # Annotate pending amount
+        if query:
+            customers = customers.filter(name__icontains=query) | customers.filter(phone__icontains=query)
+        if status:
+            customers = customers.filter(status=status)
+        customers = customers.order_by('-created_on')
         for c in customers:
-            pending = sum(s.remaining for s in c.subscriptions.filter(status__in=['pending', 'partial', 'overdue']))
+            pending = sum(s.remaining for s in c.subscriptions.filter(status__in=['pending','partial','overdue']))
             c.pending_amount = pending
-
         status_choices = GymCustomer.STATUS_CHOICES
-        context = {
-            'tenant': get_tenant(request, schema_name),
-            'customers': customers,
-            'status_choices': status_choices,
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
-        }
-        return render(request, 'tenant/gym_customer_list.html', context)
-
+        context = {'tenant': tenant, 'customers': customers, 'status_choices': status_choices, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
+    return render(request, 'tenant/gym_customer_list.html', context)
 
 @require_tenant_type(['gym'])
 def gym_customer_add(request, schema_name):
-    """Add a new gym customer."""
-    from django.shortcuts import render, redirect
+    tenant = get_tenant(request, schema_name)
     from .forms import GymCustomerForm
-    from django.contrib import messages
-    from django_tenants.utils import schema_context
-
     with schema_context(schema_name):
         if request.method == 'POST':
             form = GymCustomerForm(request.POST, request.FILES)
             if form.is_valid():
                 customer = form.save()
-                messages.success(request, f"Customer {customer.name} added successfully.")
-                return redirect('gym_customer_profile', schema_name=schema_name, customer_id=customer.id)
+                messages.success(request, f"Customer {customer.name} added.")
+                return redirect('gym_customer_list', schema_name=schema_name)
         else:
             form = GymCustomerForm()
-        context = {
-            'tenant': get_tenant(request, schema_name),
-            'form': form,
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
-        }
-        return render(request, 'tenant/gym_customer_form.html', context)
-
+        context = {'tenant': tenant, 'form': form, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
+    return render(request, 'tenant/gym_customer_form.html', context)
 
 @require_tenant_type(['gym'])
 def gym_customer_edit(request, schema_name, customer_id):
-    """Edit an existing gym customer."""
-    from django.shortcuts import render, redirect, get_object_or_404
+    tenant = get_tenant(request, schema_name)
     from .forms import GymCustomerForm
     from .models import GymCustomer
-    from django.contrib import messages
-    from django_tenants.utils import schema_context
-
     with schema_context(schema_name):
         customer = get_object_or_404(GymCustomer, id=customer_id)
         if request.method == 'POST':
             form = GymCustomerForm(request.POST, request.FILES, instance=customer)
             if form.is_valid():
                 form.save()
-                messages.success(request, f"Customer {customer.name} updated.")
-                return redirect('gym_customer_profile', schema_name=schema_name, customer_id=customer.id)
+                messages.success(request, "Customer updated.")
+                return redirect('gym_customer_list', schema_name=schema_name)
         else:
             form = GymCustomerForm(instance=customer)
-        context = {
-            'tenant': get_tenant(request, schema_name),
-            'form': form,
-            'customer': customer,
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
-        }
-        return render(request, 'tenant/gym_customer_form.html', context)
-
+        context = {'tenant': tenant, 'form': form, 'customer': customer, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
+    return render(request, 'tenant/gym_customer_form.html', context)
 
 @require_tenant_type(['gym'])
 def gym_customer_profile(request, schema_name, customer_id):
-    """Display customer profile with subscriptions and payments."""
-    from django.shortcuts import render, get_object_or_404
+    tenant = get_tenant(request, schema_name)
     from .models import GymCustomer, GymSubscription, GymPayment, GymAttendance
-    from django_tenants.utils import schema_context
-    from django.utils import timezone
-
+    from decimal import Decimal
     with schema_context(schema_name):
         customer = get_object_or_404(GymCustomer, id=customer_id)
         subscriptions = customer.subscriptions.all().order_by('-year', '-month')
         payments = customer.payments.all().order_by('-payment_date')
         attendances = customer.attendances.all().order_by('-date')
+        total_fee = subscriptions.aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
+        total_paid = payments.aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
+        pending_total = total_fee - total_paid
         for a in attendances:
             a.can_edit = a.is_editable()
-
-        total_fee = subscriptions.aggregate(models.Sum('amount'))['amount__sum'] or 0
-        total_paid = payments.aggregate(models.Sum('amount'))['amount__sum'] or 0
-        pending_total = total_fee - total_paid
-
         context = {
-            'tenant': get_tenant(request, schema_name),
-            'customer': customer,
-            'subscriptions': subscriptions,
-            'payments': payments,
+            'tenant': tenant, 'customer': customer, 'subscriptions': subscriptions, 'payments': payments,
+            'total_fee': total_fee, 'total_paid': total_paid, 'pending_total': pending_total,
             'attendances': attendances,
-            'total_fee': total_fee,
-            'total_paid': total_paid,
-            'pending_total': pending_total,
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-        return render(request, 'tenant/gym_customer_profile.html', context)
+    return render(request, 'tenant/gym_customer_profile.html', context)
 
-
+# --------------------------------------------------------------
+# FIXED GYM ATTENDANCE VIEW – uses timezone.localdate(), shows only eligible customers
+# --------------------------------------------------------------
+@require_tenant_type(['gym'])
+def gym_attendance(request, schema_name):
+    """Professional attendance page – now only renders template; data via APIs."""
+    tenant = get_tenant(request, schema_name)
+    context = {'tenant': tenant, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
+    return render(request, 'tenant/gym_attendance.html', context)
 @require_tenant_type(['gym'])
 def gym_payment(request, schema_name, customer_id=None):
-    """Collect payment for gym customer."""
-    from django.shortcuts import render, redirect, get_object_or_404
-    from django.contrib import messages
-    from decimal import Decimal
+    tenant = get_tenant(request, schema_name)
     from .models import GymCustomer, GymSubscription, GymPayment
-    from django_tenants.utils import schema_context
+    from .forms import GymPaymentForm
+    from decimal import Decimal
 
     with schema_context(schema_name):
-        # Get all customers with pending fees for the list
+        if request.method == 'POST':
+            customer_id = request.POST.get('customer_id')
+            amount = request.POST.get('amount')
+            mode = request.POST.get('payment_mode')
+            remarks = request.POST.get('remarks', '')
+            if customer_id and amount:
+                customer = get_object_or_404(GymCustomer, id=customer_id)
+                amount = Decimal(amount)
+                pending_subs = customer.subscriptions.filter(status__in=['pending','partial','overdue']).order_by('due_date')
+                total_pending = sum(s.remaining for s in pending_subs)
+                if amount > total_pending:
+                    messages.error(request, f"Amount exceeds total pending (₹{total_pending})")
+                    return redirect('gym_payment', schema_name=schema_name, customer_id=customer.id)
+                remaining = amount
+                paid_subs = []
+                for sub in pending_subs:
+                    if remaining <= 0: break
+                    due = sub.remaining
+                    if remaining >= due:
+                        sub.paid_amount = sub.amount
+                        remaining -= due
+                    else:
+                        sub.paid_amount += remaining
+                        remaining = 0
+                    sub.save()
+                    paid_subs.append(sub)
+                payment = GymPayment.objects.create(
+                    customer=customer, amount=amount, payment_mode=mode,
+                    payment_type='full' if remaining==0 else 'partial', remarks=remarks,
+                    created_by=request.session.get('school_admin_username', 'admin')
+                )
+                payment.subscriptions.set(paid_subs)
+                messages.success(request, f"Payment of ₹{amount} received. Receipt: {payment.receipt_number}")
+                return redirect('gym_payment', schema_name=schema_name, customer_id=customer.id)
+            else:
+                messages.error(request, "Invalid data")
+                return redirect('gym_payment', schema_name=schema_name)
+
         customers_with_pending = []
         for c in GymCustomer.objects.filter(status='active'):
-            pending = sum(s.remaining for s in c.subscriptions.filter(status__in=['pending', 'partial', 'overdue']))
+            pending = sum(s.remaining for s in c.subscriptions.filter(status__in=['pending','partial','overdue']))
             if pending > 0:
                 c.pending_amount = pending
                 customers_with_pending.append(c)
         customers_with_pending.sort(key=lambda x: x.pending_amount, reverse=True)
 
         selected_customer = None
-        total_pending = 0
         pending_subs = []
-
+        total_pending = 0
         if customer_id:
             selected_customer = get_object_or_404(GymCustomer, id=customer_id)
-            pending_subs = selected_customer.subscriptions.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
+            pending_subs = selected_customer.subscriptions.filter(status__in=['pending','partial','overdue']).order_by('due_date')
             total_pending = sum(s.remaining for s in pending_subs)
 
-        if request.method == 'POST':
-            cust_id = request.POST.get('customer_id')
-            amount = request.POST.get('amount')
-            payment_mode = request.POST.get('payment_mode')
-            remarks = request.POST.get('remarks', '')
-            if cust_id and amount:
-                try:
-                    customer = GymCustomer.objects.get(id=cust_id)
-                    amount = Decimal(amount)
-                    pending_subs_list = customer.subscriptions.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
-                    total_pending_sum = sum(s.remaining for s in pending_subs_list)
-                    if amount > total_pending_sum:
-                        messages.error(request, f"Amount exceeds total pending (₹{total_pending_sum})")
-                        return redirect('gym_payment', schema_name=schema_name, customer_id=customer.id)
-
-                    remaining = amount
-                    paid_subs = []
-                    for sub in pending_subs_list:
-                        if remaining <= 0:
-                            break
-                        due = sub.remaining
-                        if remaining >= due:
-                            sub.paid_amount = sub.amount
-                            remaining -= due
-                        else:
-                            sub.paid_amount += remaining
-                            remaining = 0
-                        sub.save()
-                        paid_subs.append(sub)
-
-                    payment = GymPayment.objects.create(
-                        customer=customer,
-                        amount=amount,
-                        payment_mode=payment_mode,
-                        payment_type='full' if remaining == 0 else 'partial',
-                        remarks=remarks,
-                        created_by=request.session.get('school_admin_username', 'admin')
-                    )
-                    payment.subscriptions.set(paid_subs)
-                    messages.success(request, f"Payment of ₹{amount} received. Receipt: {payment.receipt_number}")
-                    return redirect('gym_receipt', schema_name=schema_name, receipt_id=payment.id)
-                except Exception as e:
-                    messages.error(request, f"Error processing payment: {str(e)}")
-            else:
-                messages.error(request, "Invalid payment data")
-            return redirect('gym_payment', schema_name=schema_name)
-
         recent_payments = list(GymPayment.objects.select_related('customer').order_by('-payment_date')[:5])
-
         context = {
-            'tenant': get_tenant(request, schema_name),
-            'customers': customers_with_pending,
-            'selected_customer': selected_customer,
-            'total_pending': total_pending,
-            'pending_subs': pending_subs,
-            'recent_payments': recent_payments,
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
+            'tenant': tenant, 'customers': customers_with_pending, 'selected_customer': selected_customer,
+            'pending_subs': pending_subs, 'total_pending': total_pending, 'recent_payments': recent_payments,
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-        return render(request, 'tenant/gym_payment.html', context)
-
-
-@require_tenant_type(['gym'])
-def gym_receipt(request, schema_name, receipt_id):
-    """Display gym payment receipt."""
-    from django.shortcuts import render, get_object_or_404
-    from .models import GymPayment
-    from django_tenants.utils import schema_context
-
-    with schema_context(schema_name):
-        payment = get_object_or_404(GymPayment, id=receipt_id)
-        subscriptions = list(payment.subscriptions.all())
-        context = {
-            'tenant': get_tenant(request, schema_name),
-            'payment': payment,
-            'subscriptions': subscriptions,
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
-        }
-        return render(request, 'tenant/gym_receipt.html', context)
-
+    return render(request, 'tenant/gym_payment.html', context)
 
 @require_tenant_type(['gym'])
 def gym_reports(request, schema_name):
-    """Gym reports and analytics page."""
-    from django.shortcuts import render
-    from django.db.models import Sum
-    from .models import GymCustomer, GymSubscription, GymPayment, GymAttendance
-    from django_tenants.utils import schema_context
-
+    """Main reports page – loads initial context, then JS fetches data via APIs."""
+    tenant = get_tenant(request, schema_name)
+    from .models import GymCustomer, GymPayment, GymAttendance, GymSubscription
     with schema_context(schema_name):
-        # Stats for overview tab
         total_revenue_all = GymPayment.objects.aggregate(Sum('amount'))['amount__sum'] or 0
         total_checkins_all = GymAttendance.objects.count()
         active_customers = GymCustomer.objects.filter(status='active').count()
-        active_subs = GymSubscription.objects.filter(status__in=['pending', 'partial']).count()
-        from datetime import date, timedelta
-        today = date.today()
+        total_customers = GymCustomer.objects.count()
+        active_subs = GymSubscription.objects.filter(status='paid').count()
         expiring_soon = GymCustomer.objects.filter(
             status='active',
-            membership_end__gte=today,
-            membership_end__lte=today + timedelta(days=7)
+            membership_end__gte=timezone.localdate(),
+            membership_end__lte=timezone.localdate() + timedelta(days=7)
         ).count()
-
         context = {
-            'tenant': get_tenant(request, schema_name),
+            'tenant': tenant,
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
             'total_revenue_all': total_revenue_all,
             'total_checkins_all': total_checkins_all,
             'active_customers': active_customers,
+            'total_customers': total_customers,
             'active_subs': active_subs,
             'expiring_soon': expiring_soon,
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
         }
-        return render(request, 'tenant/gym_reports.html', context)
-
+    return render(request, 'tenant/gym_reports.html', context)
 
 @require_tenant_type(['gym'])
 def gym_settings(request, schema_name):
-    """Gym settings view."""
-    from django.shortcuts import render, redirect
-    from .forms import GymSettingsForm
+    tenant = get_tenant(request, schema_name)
     from .models import GymSettings
-    from django.contrib import messages
-    from django_tenants.utils import schema_context
-
+    from .forms import GymSettingsForm
     with schema_context(schema_name):
         settings_obj, created = GymSettings.objects.get_or_create(pk=1)
         if request.method == 'POST':
@@ -1428,510 +1070,622 @@ def gym_settings(request, schema_name):
                 return redirect('gym_settings', schema_name=schema_name)
         else:
             form = GymSettingsForm(instance=settings_obj)
-
-        context = {
-            'tenant': get_tenant(request, schema_name),
-            'form': form,
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
-        }
-        return render(request, 'tenant/gym_settings.html', context)
-
+        context = {'tenant': tenant, 'form': form, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
+    return render(request, 'tenant/gym_settings.html', context)
 
 @require_tenant_type(['gym'])
-def gym_attendance(request, schema_name):
-    """Attendance management page."""
-    from django.shortcuts import render
-    from django_tenants.utils import schema_context
-
+def gym_receipt(request, schema_name, receipt_id):
+    tenant = get_tenant(request, schema_name)
+    from .models import GymPayment
     with schema_context(schema_name):
+        payment = get_object_or_404(GymPayment.objects.select_related('customer'), id=receipt_id)
+        subscriptions = list(payment.subscriptions.all())
         context = {
-            'tenant': get_tenant(request, schema_name),
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
+            'tenant': tenant,
+            'payment': payment,
+            'subscriptions': subscriptions,
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-        return render(request, 'tenant/gym_attendance.html', context)
+    return render(request, 'tenant/gym_receipt.html', context)
 
+# Subscription generation and cancellation
+@require_tenant_type(['gym'])
+def gym_generate_subscription(request, schema_name, customer_id):
+    from django.http import JsonResponse
+    from .models import GymCustomer, GymSubscription, GymSettings
+    from decimal import Decimal
+    from datetime import date
+    from calendar import monthrange
+    import json
 
-# ==================== GYM API VIEWS ====================
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body)
+    except:
+        data = request.POST
+    months = int(data.get('months', 1))
+    custom_fee = data.get('fee')
+    if not custom_fee:
+        return JsonResponse({'error': 'Fee amount required'}, status=400)
+    custom_fee = Decimal(str(custom_fee))
+    if months < 1 or months > 3:
+        return JsonResponse({'error': 'Months must be between 1 and 3'}, status=400)
 
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        customer = get_object_or_404(GymCustomer, id=customer_id)
+        settings, _ = GymSettings.objects.get_or_create(pk=1)
+        today = timezone.localdate()
+        generated = []
+        for i in range(months):
+            gen_month = today.month + i
+            gen_year = today.year
+            while gen_month > 12:
+                gen_month -= 12
+                gen_year += 1
+            existing = GymSubscription.objects.filter(customer=customer, month=gen_month, year=gen_year).first()
+            if existing and existing.is_fully_paid:
+                continue
+            elif existing and not existing.is_fully_paid:
+                existing.amount = custom_fee
+                existing.due_date = date(gen_year, gen_month, min(settings.due_date_offset, monthrange(gen_year, gen_month)[1]))
+                existing.is_cancelled = False
+                existing.cancelled_on = None
+                existing.save()
+                generated.append(f"{gen_month}/{gen_year} (updated)")
+            else:
+                due_day = min(settings.due_date_offset, monthrange(gen_year, gen_month)[1])
+                due_date = date(gen_year, gen_month, due_day)
+                GymSubscription.objects.create(
+                    customer=customer,
+                    month=gen_month,
+                    year=gen_year,
+                    amount=custom_fee,
+                    due_date=due_date,
+                    status='pending'
+                )
+                generated.append(f"{gen_month}/{gen_year}")
+        customer.monthly_fee = custom_fee
+        customer.save()
+        return JsonResponse({'message': f'Subscription generated for {len(generated)} month(s): {", ".join(generated)}'})
+
+@require_tenant_type(['gym'])
+def gym_cancel_subscription(request, schema_name, subscription_id):
+    from django.http import JsonResponse
+    from .models import GymSubscription, GymPayment
+    from decimal import Decimal
+    from datetime import date
+    from calendar import monthrange
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        sub = get_object_or_404(GymSubscription, id=subscription_id)
+        if sub.is_cancelled:
+            return JsonResponse({'error': 'Already cancelled'}, status=400)
+        if sub.status == 'paid':
+            return JsonResponse({'error': 'Fully paid subscriptions cannot be cancelled'}, status=400)
+
+        today = timezone.localdate()
+        days_in_month = monthrange(sub.year, sub.month)[1]
+        if today.year == sub.year and today.month == sub.month:
+            days_used = min(today.day, days_in_month)
+        else:
+            days_used = 0
+        daily_rate = sub.amount / days_in_month
+        used_amount = daily_rate * days_used
+        refund = sub.paid_amount - used_amount
+        if refund < 0:
+            refund = Decimal('0.00')
+
+        sub.is_cancelled = True
+        sub.cancelled_on = today
+        sub.paid_amount = used_amount
+        sub.save()
+
+        if refund > 0:
+            GymPayment.objects.create(
+                customer=sub.customer,
+                amount=-refund,
+                payment_mode='refund',
+                payment_type='refund',
+                remarks=f'Refund for cancelled subscription {sub.month}/{sub.year}',
+                created_by=request.session.get('school_admin_username', 'admin')
+            ).subscriptions.add(sub)
+
+        return JsonResponse({'message': f'Subscription cancelled. Refund amount: ₹{refund}', 'refund': float(refund)})
+
+@csrf_exempt
+@require_tenant_type(['gym'])
+def gym_edit_attendance(request, schema_name, attendance_id):
+    """GET: return attendance data; POST: update attendance."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        from .models import GymAttendance
+        from .forms import AttendanceEditForm
+        attendance = get_object_or_404(GymAttendance, id=attendance_id)
+        # Enforce 7-hour edit window
+        if not attendance.is_editable():
+            return JsonResponse({'error': 'Edit window expired (only allowed within 7 hours of check-in)'}, status=403)
+        if request.method == 'GET':
+            data = {
+                'check_in': attendance.check_in.isoformat(),
+                'check_out': attendance.check_out.isoformat() if attendance.check_out else '',
+                'notes': attendance.notes or '',
+            }
+            return JsonResponse(data)
+        elif request.method == 'POST':
+            form = AttendanceEditForm(request.POST, instance=attendance)
+            if form.is_valid():
+                form.save()
+                # Recalculate duration if check_out changed
+                if attendance.check_out:
+                    duration = (attendance.check_out - attendance.check_in).total_seconds() // 60
+                    attendance.duration_minutes = int(duration)
+                    attendance.save(update_fields=['duration_minutes'])
+                return JsonResponse({'message': 'Attendance updated successfully'})
+            return JsonResponse({'errors': form.errors}, status=400)
+@csrf_exempt
+@require_http_methods(["POST"])
 @csrf_exempt
 @require_http_methods(["POST"])
 def gym_checkin_api(request):
-    """API: Check in a gym customer (barcode or ID)."""
-    from django.http import JsonResponse
-    from django.utils import timezone
-    from .models import GymCustomer, GymAttendance
-    import json
-
     if not request.session.get('school_admin_authenticated'):
-        return JsonResponse({'error': 'Unauthorized'}, status=401)
+        return JsonResponse({"error": "Unauthorized"}, status=401)
     schema_name = request.session.get('school_admin_schema')
     if not schema_name:
-        return JsonResponse({'error': 'No tenant schema'}, status=400)
+        return JsonResponse({"error": "No tenant schema"}, status=400)
+    customer_id = request.POST.get('customer_id')
+    if not customer_id:
+        return JsonResponse({"error": "Customer ID required"}, status=400)
     try:
         tenant = SchoolClient.objects.get(schema_name=schema_name)
     except SchoolClient.DoesNotExist:
-        return JsonResponse({'error': 'Tenant not found'}, status=404)
-
-    customer_id = request.POST.get('customer_id')
-    if not customer_id:
-        return JsonResponse({'error': 'customer_id required'}, status=400)
-
+        return JsonResponse({"error": "Tenant not found"}, status=404)
     with schema_context(schema_name):
-        try:
-            customer = GymCustomer.objects.get(id=customer_id, status='active')
-        except GymCustomer.DoesNotExist:
-            return JsonResponse({'error': 'Customer not found or inactive'}, status=404)
-
-        # Check if already checked in today
+        from .models import GymCustomer, GymAttendance, GymSubscription
+        from django.utils import timezone
+        customer = get_object_or_404(GymCustomer, id=customer_id)
         today = timezone.localdate()
-        existing = GymAttendance.objects.filter(customer=customer, date=today, check_out__isnull=True).first()
-        if existing:
-            return JsonResponse({'error': f'{customer.name} is already checked in today at {existing.check_in.strftime("%H:%M")}'}, status=400)
-
-        # Create attendance record
-        now = timezone.now()
-        attendance = GymAttendance.objects.create(
-            customer=customer,
-            date=today,
-            check_in=now,
-            notes=f"Checked in via API at {now.strftime('%H:%M')}"
+        # Check if customer has paid subscription for current month (or allow partial if setting enabled)
+        # For simplicity, we require status='paid' – but can be changed to allow 'partial' if needed.
+        has_paid = customer.subscriptions.filter(month=today.month, year=today.year, status='paid').exists()
+        if not has_paid:
+            return JsonResponse({"error": "No active paid subscription for current month"}, status=403)
+        # Check if already checked in today
+        attendance, created = GymAttendance.objects.get_or_create(
+            customer=customer, date=today,
+            defaults={"check_in": timezone.now()}
         )
         return JsonResponse({
-            'message': f'{customer.name} checked in successfully',
-            'customer_name': customer.name,
-            'attendance_id': attendance.id,
-            'check_in_time': now.isoformat()
+            "message": f"Check-in recorded for {customer.name}",
+            "customer_name": customer.name,
+            "customer_phone": customer.phone,
+            "check_in_time": attendance.check_in.strftime('%H:%M'),
+            "customer_id": customer.id,
+            "already_checked_in": not created
         })
-
-
+@csrf_exempt
+@require_http_methods(["POST"])
 @csrf_exempt
 @require_http_methods(["POST"])
 def gym_checkout_api(request):
-    """API: Check out a gym customer."""
-    from django.http import JsonResponse
-    from django.utils import timezone
-    from .models import GymCustomer, GymAttendance
-
     if not request.session.get('school_admin_authenticated'):
-        return JsonResponse({'error': 'Unauthorized'}, status=401)
+        return JsonResponse({"error": "Unauthorized"}, status=401)
     schema_name = request.session.get('school_admin_schema')
     if not schema_name:
-        return JsonResponse({'error': 'No tenant schema'}, status=400)
+        return JsonResponse({"error": "No tenant schema"}, status=400)
+    customer_id = request.POST.get('customer_id')
+    if not customer_id:
+        return JsonResponse({"error": "Customer ID required"}, status=400)
     try:
         tenant = SchoolClient.objects.get(schema_name=schema_name)
     except SchoolClient.DoesNotExist:
-        return JsonResponse({'error': 'Tenant not found'}, status=404)
-
-    customer_id = request.POST.get('customer_id')
-    if not customer_id:
-        return JsonResponse({'error': 'customer_id required'}, status=400)
-
+        return JsonResponse({"error": "Tenant not found"}, status=404)
     with schema_context(schema_name):
-        try:
-            customer = GymCustomer.objects.get(id=customer_id)
-        except GymCustomer.DoesNotExist:
-            return JsonResponse({'error': 'Customer not found'}, status=404)
-
+        from .models import GymCustomer, GymAttendance
+        customer = get_object_or_404(GymCustomer, id=customer_id)
         today = timezone.localdate()
         attendance = GymAttendance.objects.filter(customer=customer, date=today, check_out__isnull=True).first()
         if not attendance:
-            return JsonResponse({'error': f'{customer.name} is not checked in today'}, status=400)
-
-        now = timezone.now()
-        attendance.check_out = now
-        duration = (now - attendance.check_in).total_seconds() / 60
+            return JsonResponse({"error": "No active check-in found for today"}, status=400)
+        attendance.check_out = timezone.now()
+        # Calculate duration in minutes
+        duration = (attendance.check_out - attendance.check_in).total_seconds() // 60
         attendance.duration_minutes = int(duration)
-        attendance.notes = (attendance.notes or '') + f" Checked out at {now.strftime('%H:%M')}"
         attendance.save()
         return JsonResponse({
-            'message': f'{customer.name} checked out',
-            'customer_name': customer.name,
-            'duration_minutes': attendance.duration_minutes
+            "message": f"Check-out recorded for {customer.name}",
+            "customer_name": customer.name,
+            "customer_phone": customer.phone,
+            "attendance_id": attendance.id,
+            "duration": f"{int(duration//60)}h {int(duration%60)}m"
         })
+@require_tenant_type(['gym'])
+def gym_reports(request, schema_name):
+    """Main reports page – loads initial context, then JS fetches data via APIs."""
+    tenant = get_tenant(request, schema_name)
+    from .models import GymCustomer, GymPayment, GymAttendance, GymSubscription
+    with schema_context(schema_name):
+        # Initial KPI totals (all time)
+        total_revenue_all = GymPayment.objects.aggregate(Sum('amount'))['amount__sum'] or 0
+        total_checkins_all = GymAttendance.objects.count()
+        active_customers = GymCustomer.objects.filter(status='active').count()
+        total_customers = GymCustomer.objects.count()
+        # Active subscriptions count
+        active_subs = GymSubscription.objects.filter(status='paid').count()
+        expiring_soon = GymCustomer.objects.filter(
+            status='active',
+            membership_end__gte=timezone.localdate(),
+            membership_end__lte=timezone.localdate() + timedelta(days=7)
+        ).count()
+        context = {
+            'tenant': tenant,
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+            'total_revenue_all': total_revenue_all,
+            'total_checkins_all': total_checkins_all,
+            'active_customers': active_customers,
+            'total_customers': total_customers,
+            'active_subs': active_subs,
+            'expiring_soon': expiring_soon,
+        }
+    return render(request, 'tenant/gym_reports.html', context)
 
-
+@csrf_exempt
+@require_tenant_type(['gym'])
 def gym_revenue_stats_api(request, schema_name):
-    """API: Revenue statistics for gym."""
-    from django.http import JsonResponse
-    from django.db.models import Sum, Count
-    from .models import GymPayment
-    from django_tenants.utils import schema_context
-    from datetime import date, timedelta
-    from collections import defaultdict
-    from decimal import Decimal
-
+    """API: revenue stats for given date range and grouping (day/month)."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
     start_str = request.GET.get('start')
     end_str = request.GET.get('end')
-    group_by = request.GET.get('group_by', 'month')  # 'day' or 'month'
-
+    group_by = request.GET.get('group_by', 'month')  # day or month
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else None
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').date() if end_str else None
+    except:
+        return JsonResponse({'error': 'Invalid date format'}, status=400)
+    
     with schema_context(schema_name):
+        from .models import GymPayment
         qs = GymPayment.objects.all()
-        if start_str:
-            qs = qs.filter(payment_date__gte=date.fromisoformat(start_str))
-        if end_str:
-            qs = qs.filter(payment_date__lte=date.fromisoformat(end_str))
-
-        total_revenue = qs.aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
-        transaction_count = qs.count()
-
-        # Mode distribution
-        mode_totals = defaultdict(Decimal)
-        for p in qs:
-            mode_totals[p.get_payment_mode_display()] += p.amount
-        mode_distribution = [{'name': k, 'amount': float(v)} for k, v in mode_totals.items()]
-
-        # Top spenders
-        top_spenders = []
-        customer_totals = defaultdict(Decimal)
-        for p in qs.select_related('customer'):
-            customer_totals[p.customer.name] += p.amount
-        for name, total in sorted(customer_totals.items(), key=lambda x: x[1], reverse=True)[:5]:
-            top_spenders.append({'name': name, 'total': float(total)})
-
-        # Time series
-        labels = []
-        amounts = []
-        if group_by == 'month':
-            # Group by month-year
-            monthly = {}
-            for p in qs:
-                key = f"{p.payment_date.year}-{p.payment_date.month:02d}"
-                monthly[key] = monthly.get(key, Decimal('0')) + p.amount
-            # Sort by date
-            for key in sorted(monthly.keys()):
-                labels.append(key)
-                amounts.append(float(monthly[key]))
+        if start_date:
+            qs = qs.filter(payment_date__gte=start_date)
+        if end_date:
+            qs = qs.filter(payment_date__lte=end_date)
+        
+        if group_by == 'day':
+            data = qs.annotate(day=TruncDay('payment_date')).values('day').annotate(total=Sum('amount')).order_by('day')
+            labels = [d['day'].strftime('%Y-%m-%d') for d in data]
+            amounts = [float(d['total']) for d in data]
         else:
-            # Daily
-            daily = {}
-            for p in qs:
-                key = p.payment_date.isoformat()
-                daily[key] = daily.get(key, Decimal('0')) + p.amount
-            for key in sorted(daily.keys()):
-                labels.append(key)
-                amounts.append(float(daily[key]))
-
+            data = qs.annotate(month=TruncMonth('payment_date')).values('month').annotate(total=Sum('amount')).order_by('month')
+            labels = [d['month'].strftime('%b %Y') for d in data]
+            amounts = [float(d['total']) for d in data]
+        
+        # Payment mode distribution
+        mode_totals = {}
+        for mode_code, mode_name in GymPayment.PAYMENT_MODE_CHOICES:
+            total = qs.filter(payment_mode=mode_code).aggregate(Sum('amount'))['amount__sum'] or 0
+            if total > 0:
+                mode_totals[mode_name] = float(total)
+        mode_distribution = [{'name': k, 'amount': v} for k, v in mode_totals.items()]
+        
+        # Top spenders (customers with highest total payments in range)
+        top_spenders = qs.values('customer__id', 'customer__name', 'customer__phone').annotate(total=Sum('amount')).order_by('-total')[:5]
+        top_spenders_list = [{'id': c['customer__id'], 'name': c['customer__name'], 'phone': c['customer__phone'], 'total': float(c['total'])} for c in top_spenders]
+        
         return JsonResponse({
-            'total_revenue': float(total_revenue),
-            'transaction_count': transaction_count,
-            'mode_distribution': mode_distribution,
-            'top_spenders': top_spenders,
             'labels': labels,
-            'amounts': amounts
+            'amounts': amounts,
+            'mode_distribution': mode_distribution,
+            'top_spenders': top_spenders_list,
+            'total_revenue': float(qs.aggregate(Sum('amount'))['amount__sum'] or 0),
+            'transaction_count': qs.count()
         })
 
-
+@csrf_exempt
+@require_tenant_type(['gym'])
 def gym_attendance_stats_api(request, schema_name):
-    """API: Attendance statistics for gym."""
-    from django.http import JsonResponse
-    from django.db.models import Count
-    from .models import GymAttendance
-    from django_tenants.utils import schema_context
-    from datetime import date, timedelta
-    from collections import defaultdict
-
+    """API: attendance stats for date range."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
     start_str = request.GET.get('start')
     end_str = request.GET.get('end')
-
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else None
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').date() if end_str else None
+    except:
+        return JsonResponse({'error': 'Invalid date format'}, status=400)
+    
     with schema_context(schema_name):
+        from .models import GymAttendance
         qs = GymAttendance.objects.all()
-        if start_str:
-            qs = qs.filter(date__gte=date.fromisoformat(start_str))
-        if end_str:
-            qs = qs.filter(date__lte=date.fromisoformat(end_str))
-
-        total_checkins = qs.count()
+        if start_date:
+            qs = qs.filter(date__gte=start_date)
+        if end_date:
+            qs = qs.filter(date__lte=end_date)
+        
+        # Daily check-ins
+        daily = qs.values('date').annotate(count=Count('id')).order_by('date')
+        labels = [d['date'].strftime('%Y-%m-%d') for d in daily]
+        counts = [d['count'] for d in daily]
+        
+        # Check-in hour distribution
+        hour_dist = defaultdict(int)
+        for att in qs:
+            hour_dist[att.check_in.hour] += 1
+        hours = sorted(hour_dist.keys())
+        hour_counts = [hour_dist[h] for h in hours]
+        
+        # Unique customers
         unique_customers = qs.values('customer').distinct().count()
-        avg_per_day = 0
-        if start_str and end_str:
-            days = (date.fromisoformat(end_str) - date.fromisoformat(start_str)).days + 1
-            if days > 0:
-                avg_per_day = round(total_checkins / days, 1)
-
-        # Daily counts
-        daily_counts = defaultdict(int)
-        for a in qs:
-            daily_counts[a.date.isoformat()] += 1
-        labels = sorted(daily_counts.keys())
-        counts = [daily_counts[d] for d in labels]
-
-        # Hour distribution
-        hour_counts = defaultdict(int)
-        for a in qs:
-            hour = a.check_in.hour
-            hour_counts[hour] += 1
-        hour_labels = list(range(24))
-        hour_counts_list = [hour_counts[h] for h in hour_labels]
-
+        
+        # Average per day
+        if daily:
+            avg_per_day = sum(counts) / len(daily)
+        else:
+            avg_per_day = 0
+        
         return JsonResponse({
-            'total_checkins': total_checkins,
-            'unique_customers': unique_customers,
-            'avg_per_day': avg_per_day,
             'labels': labels,
             'counts': counts,
-            'hour_labels': hour_labels,
-            'hour_counts': hour_counts_list
+            'hour_labels': hours,
+            'hour_counts': hour_counts,
+            'total_checkins': qs.count(),
+            'unique_customers': unique_customers,
+            'avg_per_day': round(avg_per_day, 1)
         })
 
-
+@csrf_exempt
+@require_tenant_type(['gym'])
 def gym_customers_list_api(request, schema_name):
-    """API: List customers with optional search and status filter."""
-    from django.http import JsonResponse
-    from django.db.models import Sum
-    from .models import GymCustomer, GymSubscription, GymPayment, GymAttendance
-    from django_tenants.utils import schema_context
-
+    """API: list of all customers with basic stats (total paid, pending, attendance count)."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
     search = request.GET.get('search', '')
-    status = request.GET.get('status', '')
-
+    status_filter = request.GET.get('status', '')
+    
     with schema_context(schema_name):
-        qs = GymCustomer.objects.all()
+        from .models import GymCustomer, GymPayment, GymSubscription, GymAttendance
+        customers = GymCustomer.objects.all()
         if search:
-            qs = qs.filter(name__icontains=search) | qs.filter(phone__icontains=search)
-        if status:
-            qs = qs.filter(status=status)
-
-        customers = []
-        for c in qs:
+            customers = customers.filter(Q(name__icontains=search) | Q(phone__icontains=search))
+        if status_filter:
+            customers = customers.filter(status=status_filter)
+        
+        data = []
+        for c in customers:
             total_paid = c.payments.aggregate(Sum('amount'))['amount__sum'] or 0
-            total_billed = c.subscriptions.aggregate(Sum('amount'))['amount__sum'] or 0
-            pending = total_billed - total_paid
+            pending = sum(s.remaining for s in c.subscriptions.filter(status__in=['pending','partial','overdue']))
             attendance_count = c.attendances.count()
-            customers.append({
+            data.append({
                 'id': c.id,
                 'name': c.name,
                 'phone': c.phone,
                 'status': c.status,
-                'membership_end': c.membership_end.isoformat() if c.membership_end else None,
+                'membership_end': c.membership_end.strftime('%Y-%m-%d') if c.membership_end else None,
                 'total_paid': float(total_paid),
                 'pending': float(pending),
                 'attendance_count': attendance_count
             })
-        return JsonResponse(customers, safe=False)
+        return JsonResponse(data, safe=False)
 
-
+@csrf_exempt
+@require_tenant_type(['gym'])
 def gym_customer_detail_api(request, schema_name, customer_id):
-    """API: Detailed customer data for modal."""
-    from django.http import JsonResponse
-    from django.db.models import Sum
-    from .models import GymCustomer, GymSubscription, GymPayment, GymAttendance
-    from django_tenants.utils import schema_context
-
+    """API: detailed info for a single customer (payments, subscriptions, attendance)."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
-        try:
-            c = GymCustomer.objects.get(id=customer_id)
-        except GymCustomer.DoesNotExist:
-            return JsonResponse({'error': 'Customer not found'}, status=404)
-
-        total_paid = c.payments.aggregate(Sum('amount'))['amount__sum'] or 0
-        total_billed = c.subscriptions.aggregate(Sum('amount'))['amount__sum'] or 0
-        pending = total_billed - total_paid
-
-        payments = [{
+        from .models import GymCustomer, GymPayment, GymSubscription, GymAttendance
+        customer = get_object_or_404(GymCustomer, id=customer_id)
+        # Payments
+        payments = customer.payments.all().order_by('-payment_date')
+        payments_data = [{
             'receipt': p.receipt_number,
             'amount': float(p.amount),
-            'date': p.payment_date.isoformat(),
+            'date': p.payment_date.strftime('%Y-%m-%d'),
             'mode': p.get_payment_mode_display()
-        } for p in c.payments.order_by('-payment_date')]
-
-        subscriptions = [{
+        } for p in payments]
+        # Subscriptions
+        subs = customer.subscriptions.all().order_by('-year', '-month')
+        subs_data = [{
             'month': f"{s.month}/{s.year}",
             'amount': float(s.amount),
             'paid': float(s.paid_amount),
             'status': s.get_status_display(),
             'cancelled': s.is_cancelled
-        } for s in c.subscriptions.order_by('-year', '-month')]
-
-        attendances = [{
-            'date': a.date.isoformat(),
-            'check_in': a.check_in.isoformat(),
-            'check_out': a.check_out.isoformat() if a.check_out else None
-        } for a in c.attendances.order_by('-date')]
-
+        } for s in subs]
+        # Attendance
+        attendances = customer.attendances.all().order_by('-date')
+        attendance_data = [{
+            'date': a.date.strftime('%Y-%m-%d'),
+            'check_in': a.check_in.strftime('%H:%M'),
+            'check_out': a.check_out.strftime('%H:%M') if a.check_out else None
+        } for a in attendances]
+        
+        total_paid = sum(p.amount for p in payments)
+        pending = sum(s.remaining for s in subs if s.status in ['pending','partial','overdue'])
+        
         return JsonResponse({
-            'id': c.id,
-            'name': c.name,
-            'phone': c.phone,
-            'email': c.email,
-            'status': c.status,
-            'membership_start': c.membership_start.isoformat(),
-            'membership_end': c.membership_end.isoformat() if c.membership_end else None,
-            'monthly_fee': float(c.monthly_fee),
+            'id': customer.id,
+            'name': customer.name,
+            'phone': customer.phone,
+            'email': customer.email,
+            'status': customer.status,
+            'membership_start': customer.membership_start.strftime('%Y-%m-%d'),
+            'membership_end': customer.membership_end.strftime('%Y-%m-%d') if customer.membership_end else None,
+            'monthly_fee': float(customer.monthly_fee),
             'total_paid': float(total_paid),
             'pending': float(pending),
-            'payments': payments,
-            'subscriptions': subscriptions,
-            'attendances': attendances
+            'payments': payments_data,
+            'subscriptions': subs_data,
+            'attendances': attendance_data
         })
 
-
+@csrf_exempt
+@require_tenant_type(['gym'])
 def gym_subscription_status_api(request, schema_name):
-    """API: Subscription status counts and expiring lists."""
-    from django.http import JsonResponse
-    from .models import GymCustomer, GymSubscription
-    from django_tenants.utils import schema_context
-    from datetime import date, timedelta
-
+    """API: subscription status summary and list."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
-        today = date.today()
-        current_month = today.month
-        current_year = today.year
-
-        active_subs = GymSubscription.objects.filter(month=current_month, year=current_year, status__in=['pending', 'partial'])
-        active_count = active_subs.count()
-        active_subscriptions = [{'customer': s.customer.name, 'amount': float(s.amount)} for s in active_subs]
-
+        from .models import GymSubscription, GymCustomer
+        today = timezone.localdate()
+        # Active subscriptions (paid for current month)
+        active_subs = GymSubscription.objects.filter(
+            month=today.month, year=today.year, status='paid'
+        ).select_related('customer')
+        # Expiring soon (customers whose membership ends within 7 days)
         expiring_customers = GymCustomer.objects.filter(
             status='active',
             membership_end__gte=today,
             membership_end__lte=today + timedelta(days=7)
         )
-        expiring_count = expiring_customers.count()
-        expiring_soon = [{'name': c.name, 'phone': c.phone, 'end_date': c.membership_end.isoformat()} for c in expiring_customers]
-
-        expired_customers = GymCustomer.objects.filter(status='expired') | GymCustomer.objects.filter(membership_end__lt=today, status='active')
-        expired_count = expired_customers.count()
-        expired_list = [{'name': c.name, 'phone': c.phone, 'end_date': c.membership_end.isoformat() if c.membership_end else 'Unknown'} for c in expired_customers]
-
+        # Expired customers
+        expired_customers = GymCustomer.objects.filter(status='expired')
+        
+        active_list = [{'customer': sub.customer.name, 'amount': float(sub.amount)} for sub in active_subs]
+        expiring_list = [{'name': c.name, 'phone': c.phone, 'end_date': c.membership_end.strftime('%Y-%m-%d')} for c in expiring_customers]
+        expired_list = [{'name': c.name, 'phone': c.phone, 'end_date': c.membership_end.strftime('%Y-%m-%d') if c.membership_end else ''} for c in expired_customers]
+        
         return JsonResponse({
-            'active_count': active_count,
-            'active_subscriptions': active_subscriptions,
-            'expiring_count': expiring_count,
-            'expiring_soon': expiring_soon,
-            'expired_count': expired_count,
+            'active_count': active_subs.count(),
+            'expiring_count': expiring_customers.count(),
+            'expired_count': expired_customers.count(),
+            'active_subscriptions': active_list,
+            'expiring_soon': expiring_list,
             'expired_customers': expired_list
         })
 
 
+# ========== NEW PROFESSIONAL ATTENDANCE APIS ==========
+@csrf_exempt
+@require_tenant_type(['gym'])
 def gym_attendance_data_api(request, schema_name):
-    """API: Get active check-ins and today's history for attendance page."""
-    from django.http import JsonResponse
-    from .models import GymAttendance, GymCustomer
-    from django.utils import timezone
-    from django_tenants.utils import schema_context
-
+    """Returns active check-ins, today's history, and stats."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
+        from .models import GymAttendance, GymCustomer
+        from django.utils import timezone
         today = timezone.localdate()
-        # Active check-ins (not checked out yet)
-        active = GymAttendance.objects.filter(date=today, check_out__isnull=True).select_related('customer')
-        active_data = []
-        for a in active:
-            active_data.append({
-                'id': a.id,
-                'customer_id': a.customer.id,
-                'customer_name': a.customer.name,
-                'customer_phone': a.customer.phone,
-                'check_in_time': a.check_in.strftime('%H:%M:%S'),
-                'check_in_raw': a.check_in.isoformat()
-            })
+        # Active check-ins (not checked out)
+        active_qs = GymAttendance.objects.filter(date=today, check_out__isnull=True).select_related('customer').order_by('-check_in')
+        active = [{
+            'id': a.id,
+            'customer_id': a.customer.id,
+            'customer_name': a.customer.name,
+            'customer_phone': a.customer.phone,
+            'check_in_time': local_time_str(a.check_in),
+            'check_in_raw': a.check_in.isoformat(),
+        } for a in active_qs]
         # Today's history (checked out)
-        history = GymAttendance.objects.filter(date=today, check_out__isnull=False).select_related('customer')
-        history_data = []
-        for a in history:
-            duration = None
-            if a.duration_minutes:
-                duration = f"{a.duration_minutes // 60}h {a.duration_minutes % 60}m"
-            history_data.append({
+        history_qs = GymAttendance.objects.filter(date=today, check_out__isnull=False).select_related('customer').order_by('-check_out')
+        history = []
+        for a in history_qs:
+            duration = ''
+            if hasattr(a, 'duration_minutes') and a.duration_minutes:
+                mins = a.duration_minutes
+                duration = f"{mins//60}h {mins%60}m"
+            history.append({
                 'id': a.id,
                 'customer_name': a.customer.name,
                 'customer_phone': a.customer.phone,
-                'check_in_time': a.check_in.strftime('%H:%M:%S'),
-                'check_out_time': a.check_out.strftime('%H:%M:%S') if a.check_out else None,
+                'check_in_time': local_time_str(a.check_in),
+                'check_out_time': local_time_str(a.check_out),
                 'duration': duration,
-                'notes': a.notes
+                'notes': a.notes or '',
             })
         # Stats
-        today_stats = {
-            'total': GymAttendance.objects.filter(date=today).count(),
-            'active': active.count(),
-            'unique': GymAttendance.objects.filter(date=today).values('customer').distinct().count()
-        }
+        total_checkins = GymAttendance.objects.filter(date=today).count()
+        unique_customers = GymAttendance.objects.filter(date=today).values('customer').distinct().count()
         return JsonResponse({
-            'active': active_data,
-            'history': history_data,
-            'today_stats': today_stats
+            'active': active,
+            'history': history,
+            'today_stats': {
+                'total': total_checkins,
+                'active': active_qs.count(),
+                'unique': unique_customers,
+            }
         })
 
+@csrf_exempt
 
+@require_tenant_type(['gym'])
 def gym_eligible_customers_api(request, schema_name):
-    """API: Return customers eligible for check-in (active, not already checked in today)."""
-    from django.http import JsonResponse
-    from .models import GymCustomer, GymAttendance
-    from django.utils import timezone
-    from django_tenants.utils import schema_context
-
+    """Returns customers who can check in today (paid subscription + not already checked in)."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
+        from .models import GymCustomer, GymAttendance, GymSubscription
+        from django.db.models import Q
         today = timezone.localdate()
-        checked_in_ids = set(GymAttendance.objects.filter(date=today).values_list('customer_id', flat=True))
-        eligible = GymCustomer.objects.filter(status='active').exclude(id__in=checked_in_ids)
-        data = [{'id': c.id, 'name': c.name, 'phone': c.phone} for c in eligible]
-        return JsonResponse(data, safe=False)
-
-
-def gym_search_customer_api(request, schema_name):
-    """API: Search customers by query (phone, name, barcode)."""
-    from django.http import JsonResponse
-    from django.db.models import Q
-    from .models import GymCustomer
-    from django_tenants.utils import schema_context
-
-    q = request.GET.get('q', '')
-    with schema_context(schema_name):
+        # Customers with a paid subscription this month AND not already checked in today
         customers = GymCustomer.objects.filter(
-            Q(name__icontains=q) | Q(phone__icontains=q) | Q(barcode__icontains=q)
-        )[:10]
+            Q(subscriptions__month=today.month, subscriptions__year=today.year, subscriptions__status='paid') &
+            ~Q(attendances__date=today)
+        ).distinct().only('id', 'name', 'phone')
         data = [{'id': c.id, 'name': c.name, 'phone': c.phone} for c in customers]
         return JsonResponse(data, safe=False)
 
-
-def gym_export_attendance_api(request, schema_name):
-    """API: Export attendance for a given date as CSV."""
-    from django.http import HttpResponse
-    from .models import GymAttendance
-    from django.utils import timezone
-    from django_tenants.utils import schema_context
-    import csv
-
-    date_str = request.GET.get('date', 'today')
-    if date_str == 'today':
-        target_date = timezone.localdate()
-    else:
-        target_date = date.fromisoformat(date_str)
-
+@csrf_exempt
+@require_tenant_type(['gym'])
+def gym_search_customer_api(request, schema_name):
+    """Search customers by barcode, phone, or name."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return JsonResponse([], safe=False)
     with schema_context(schema_name):
-        attendances = GymAttendance.objects.filter(date=target_date).select_related('customer')
+        from .models import GymCustomer
+        customers = GymCustomer.objects.filter(
+            Q(name__icontains=q) | Q(phone__icontains=q)
+        )[:5]
+        data = [{'id': c.id, 'name': c.name, 'phone': c.phone} for c in customers]
+        return JsonResponse(data, safe=False)
+
+@csrf_exempt
+@require_tenant_type(['gym'])
+def gym_export_attendance_api(request, schema_name):
+    """Export today's attendance as CSV."""
+    if not request.session.get('school_admin_authenticated'):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        from .models import GymAttendance
+        import csv
+        from django.http import HttpResponse
+        today = timezone.localdate()
+        attendances = GymAttendance.objects.filter(date=today).select_related('customer').order_by('-check_in')
         response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = f'attachment; filename="attendance_{target_date}.csv"'
+        response['Content-Disposition'] = f'attachment; filename="attendance_{today}.csv"'
         writer = csv.writer(response)
         writer.writerow(['Customer Name', 'Phone', 'Check In', 'Check Out', 'Duration (min)', 'Notes'])
         for a in attendances:
-            duration = a.duration_minutes if a.duration_minutes else ''
+            duration = ''
+            if a.check_out:
+                duration = int((a.check_out - a.check_in).total_seconds() / 60)
             writer.writerow([
-                a.customer.name,
-                a.customer.phone,
-                a.check_in.strftime('%Y-%m-%d %H:%M:%S'),
-                a.check_out.strftime('%Y-%m-%d %H:%M:%S') if a.check_out else '',
+                a.customer.name, a.customer.phone,
+                a.check_in.strftime('%H:%M'),
+                a.check_out.strftime('%H:%M') if a.check_out else '',
                 duration,
                 a.notes or ''
             ])
         return response
-
-
-@require_tenant_type(['gym'])
-def gym_attendance(request, schema_name):
-    """Attendance management page."""
-    from django.shortcuts import render
-    from django_tenants.utils import schema_context
-
-    with schema_context(schema_name):
-        context = {
-            'tenant': get_tenant(request, schema_name),
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
-        }
-        return render(request, 'tenant/gym_attendance.html', context)
-
-
-# Ensure all necessary imports are present at the top of views.py (this script will not modify existing imports,
-# but the functions contain their own imports; however, we need to make sure the decorator @require_tenant_type
-# and get_tenant are available. They are already defined at the top of views.py.
-# Also ensure that SchoolClient is imported if needed inside functions. We'll import inside each function.

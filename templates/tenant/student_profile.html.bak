@@ -45,28 +45,9 @@
     <h3 class="section-title">💳 Payment History</h3>
     <div class="table-responsive">
         <table class="data-table" id="paymentTable">
-            <thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Receipt</th></td></thead>
-            <tbody id="paymentTableBody"><tr><td colspan="4" class="loading-row">Loading...</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Receipt</th></tr></thead>
+            <tbody id="paymentTableBody"><td><td colspan="4" class="loading-row">Loading...</td></tr></tbody>
         </table>
-    </div>
-</div>
-
-<!-- Custom Fee Modal (inside body block) -->
-<div id="customFeeModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <div id="modalMessage"></div>
-        <h3 id="modalTitle">Generate Current Month Fee</h3>
-        <p><strong>Student:</strong> {{ student.name }}</p>
-        <p><strong>Default Fee (from class):</strong> <span id="defaultFeeDisplay">₹0</span></p>
-        <div>
-            <label>Custom Amount (₹) - leave empty to use default</label>
-            <input type="number" id="customFeeAmount" step="0.01" placeholder="Enter custom amount">
-        </div>
-        <p style="font-size:0.8rem; color:var(--muted);">Note: Custom amount applies only to <strong>{{ current_month }}/{{ current_year }}</strong>. Future months will use the class fee structure.</p>
-        <div class="modal-actions">
-            <button id="cancelFeeModalBtn" class="btn-secondary">Cancel</button>
-            <button id="confirmFeeModalBtn" class="btn-primary">Generate</button>
-        </div>
     </div>
 </div>
 
@@ -107,7 +88,6 @@
 .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
 </style>
 
-
 <script>
 function getCookie(name) {
     let cookieValue = null;
@@ -126,17 +106,10 @@ function getCookie(name) {
 const csrfToken = getCookie('csrftoken');
 const schema = '{{ tenant.schema_name }}';
 const studentId = {{ student.id }};
-console.log('[DEBUG] student_profile loaded. schema=' + schema + ', studentId=' + studentId);
-
-async function refreshData() {
-    await loadFeeRecords();
-    await loadPayments();
-}
 
 async function loadFeeRecords() {
     try {
         const resp = await fetch(`/portal/${schema}/api/student/${studentId}/fee-records/`);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
         const tbody = document.getElementById('feeTableBody');
         if (data.length === 0) {
@@ -182,7 +155,6 @@ async function loadFeeRecords() {
 async function loadPayments() {
     try {
         const resp = await fetch(`/portal/${schema}/api/student/${studentId}/payments/`);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
         const tbody = document.getElementById('paymentTableBody');
         if (data.length === 0) {
@@ -205,120 +177,42 @@ async function loadPayments() {
     }
 }
 
-// Modal elements
+// Modal logic
 const modal = document.getElementById('customFeeModal');
 const confirmBtn = document.getElementById('confirmFeeModalBtn');
 const cancelBtn = document.getElementById('cancelFeeModalBtn');
 const amountInput = document.getElementById('customFeeAmount');
 const defaultFeeSpan = document.getElementById('defaultFeeDisplay');
-const modalTitle = document.getElementById('modalTitle');
 
-// Helper to get modal-actions div
-function getModalActionsDiv() {
-    return modal.querySelector('.modal-actions');
+let defaultFee = {{ student.custom_fee|default:0 }};
+if (defaultFee === 0) {
+    defaultFeeSpan.innerText = '₹0 (No fee structure set)';
+    amountInput.placeholder = 'No default fee';
+} else {
+    defaultFeeSpan.innerText = '₹' + defaultFee.toFixed(2);
+    amountInput.placeholder = 'Default: ₹' + defaultFee.toFixed(2);
 }
 
 function openModal() {
+    amountInput.value = '';
     modal.style.display = 'flex';
 }
 
 function closeModal() {
     modal.style.display = 'none';
-    // Remove any dynamic info div if present
-    const infoDiv = document.getElementById('modalInfo');
-    if (infoDiv) infoDiv.remove();
-    // Ensure the custom amount input is visible again
-    const amountDiv = amountInput.closest('div');
-    if (amountDiv) amountDiv.style.display = 'block';
-    const actionsDiv = getModalActionsDiv();
-    if (actionsDiv) actionsDiv.style.display = 'flex';
-}
-
-async function getCurrentFeeStatus() {
-    const url = `/portal/${schema}/api/student/${studentId}/current-fee-status/`;
-    console.log('[DEBUG] Fetching current fee status from', url);
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
-}
-
-async function showFeeModal() {
-    console.log('[DEBUG] showFeeModal called');
-    try {
-        const status = await getCurrentFeeStatus();
-        console.log('[DEBUG] Current fee status:', status);
-        const defaultFee = status.default_fee !== undefined ? status.default_fee : {{ student.custom_fee|default:0 }};
-        
-        // Reset modal UI
-        amountInput.value = '';
-        modalTitle.innerText = 'Generate Current Month Fee';
-        // Remove any old info div
-        const oldInfo = document.getElementById('modalInfo');
-        if (oldInfo) oldInfo.remove();
-        // Ensure amount input div is visible
-        const amountDiv = amountInput.closest('div');
-        if (amountDiv) amountDiv.style.display = 'block';
-        const actionsDiv = getModalActionsDiv();
-        if (actionsDiv) actionsDiv.style.display = 'flex';
-        
-        if (status.exists) {
-            if (status.paid_amount > 0) {
-                // Already paid, show read-only info
-                modalTitle.innerText = 'Fee Already Processed';
-                const infoDiv = document.createElement('div');
-                infoDiv.id = 'modalInfo';
-                infoDiv.innerHTML = `<p><strong>Amount:</strong> ₹${status.amount.toFixed(2)}</p>
-                                     <p><strong>Paid:</strong> ₹${status.paid_amount.toFixed(2)}</p>
-                                     <p><strong>Status:</strong> ${status.status}</p>`;
-                // Insert before the actions div
-                if (actionsDiv) {
-                    modal.querySelector('.modal-content').insertBefore(infoDiv, actionsDiv);
-                } else {
-                    modal.querySelector('.modal-content').appendChild(infoDiv);
-                }
-                if (amountDiv) amountDiv.style.display = 'none';
-                if (actionsDiv) actionsDiv.style.display = 'none';
-                openModal();
-                return;
-            } else {
-                // Exists but unpaid – allow update
-                modalTitle.innerText = 'Update Current Month Fee';
-                defaultFeeSpan.innerText = `Current fee: ₹${status.amount.toFixed(2)} (unpaid)`;
-                amountInput.placeholder = `New amount (₹) - leave empty to keep ₹${status.amount.toFixed(2)}`;
-                confirmBtn.innerText = 'Update Fee';
-                openModal();
-                return;
-            }
-        } else {
-            // No fee – show creation modal
-            if (defaultFee === 0) {
-                defaultFeeSpan.innerText = '₹0 (No fee structure set)';
-                amountInput.placeholder = 'Enter custom amount';
-            } else {
-                defaultFeeSpan.innerText = '₹' + defaultFee.toFixed(2);
-                amountInput.placeholder = 'Leave empty for default';
-            }
-            confirmBtn.innerText = 'Generate';
-            openModal();
-        }
-    } catch(e) {
-        console.error('Error in showFeeModal:', e);
-        alert('Failed to load current fee status: ' + e.message);
-    }
 }
 
 async function generateWithCustom(customAmount) {
     const btn = document.getElementById('genFeeBtn');
     btn.disabled = true;
     const originalText = btn.innerText;
-    btn.innerText = 'Processing...';
+    btn.innerText = 'Generating...';
     try {
         const formData = new URLSearchParams();
         formData.append('student_id', studentId);
         if (customAmount !== undefined && customAmount !== null && customAmount !== '') {
             formData.append('custom_amount', customAmount);
         }
-        console.log('[DEBUG] POST /api/manual-generate-single/ with data:', formData.toString());
         const resp = await fetch('/api/manual-generate-single/', {
             method: 'POST',
             headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -328,13 +222,10 @@ async function generateWithCustom(customAmount) {
         if (data.error) {
             alert('Error: ' + data.error);
         } else {
-            alert(data.message);
-            await refreshData();
-            // Redirect to fee collection page for this student
+            // Success – redirect to fee collection page
             window.location.href = `/portal/${schema}/fee/collection/${studentId}/`;
         }
     } catch(e) {
-        console.error('Generation error:', e);
         alert('Error generating fee: ' + e.message);
     } finally {
         btn.disabled = false;
@@ -361,18 +252,29 @@ window.onclick = function(event) {
     if (event.target === modal) closeModal();
 };
 
-// Attach click handler to generate button
-const genBtn = document.getElementById('genFeeBtn');
-if (genBtn) {
-    genBtn.addEventListener('click', showFeeModal);
-    console.log('[DEBUG] Generate button event attached');
-} else {
-    console.error('[ERROR] Button with id "genFeeBtn" not found!');
-}
+// Attach click handler to the generate button
+document.getElementById('genFeeBtn').addEventListener('click', openModal);
 
-// Load initial data
+// Load data
 loadFeeRecords();
 loadPayments();
 </script>
 
+<!-- Custom Fee Modal -->
+<div id="customFeeModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h3>Generate Current Month Fee</h3>
+        <p><strong>Student:</strong> {{ student.name }}</p>
+        <p><strong>Default Fee (from class):</strong> <span id="defaultFeeDisplay">₹0</span></p>
+        <div>
+            <label>Custom Amount (₹) - leave empty to use default</label>
+            <input type="number" id="customFeeAmount" step="0.01" placeholder="Enter custom amount">
+        </div>
+        <p style="font-size:0.8rem; color:var(--muted);">Note: Custom amount applies only to <strong>{{ current_month }}/{{ current_year }}</strong>. Future months will use the class fee structure.</p>
+        <div class="modal-actions">
+            <button id="cancelFeeModalBtn" class="btn-secondary">Cancel</button>
+            <button id="confirmFeeModalBtn" class="btn-primary">Generate</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
