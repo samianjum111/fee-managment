@@ -6,10 +6,25 @@ env = environ.Env(DEBUG=(bool, False))
 BASE_DIR = Path(__file__).resolve().parent.parent
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
+def get_csrf_trusted_origins():
+    import os
+    origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+    origins = [o.strip() for o in origins if o.strip()]
+    # Add Railway production domain if available
+    railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
+    if railway_domain and railway_domain not in origins:
+        origins.append(f"https://{railway_domain}")
+    # Also add the base domain pattern? No wildcard. So we keep as is.
+    if not origins:
+        # Fallback for development
+        origins = ['http://localhost:8000']
+    return origins
+
+
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-fallback-for-build-only')
 DEBUG = env('DEBUG', default=False)
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') or ['*']
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -124,6 +139,6 @@ SESSION_COOKIE_DOMAIN = None
 CSRF_COOKIE_DOMAIN = None
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_SAVE_EVERY_REQUEST = False
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000').split(',')
+CSRF_TRUSTED_ORIGINS = get_csrf_trusted_origins()
 SESSION_COOKIE_PATH = '/'
 SESSION_FILE_PATH = '/tmp/django_sessions/'
