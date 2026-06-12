@@ -183,8 +183,12 @@ def fee_receipt(request, schema_name, receipt_id):
         fee_records = list(payment.fee_records.all())
         item_breakdown = []
         remarks = payment.remarks or ''
-        if 'items sold:' in remarks.lower():
-            raw = remarks.split('items sold:', 1)[1]
+        lowered_remarks = remarks.lower()
+        marker_index = lowered_remarks.find('items sold:')
+        if marker_index == -1:
+            marker_index = lowered_remarks.find('items sold')
+        if marker_index != -1:
+            raw = remarks[marker_index + len('items sold:') if 'items sold:' in lowered_remarks else marker_index + len('items sold'):]
             for chunk in raw.split(';'):
                 chunk = chunk.strip()
                 if not chunk:
