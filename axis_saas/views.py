@@ -151,9 +151,21 @@ def student_profile(request, schema_name, student_id):
         total_paid = payments_qs.aggregate(Sum('amount'))['amount__sum'] or 0
         payments = list(payments_qs)
         pending_total = total_fee - total_paid
+        item_purchase_summary = []
+        for payment in payments:
+            remarks = (payment.remarks or '').strip()
+            if 'items sold' in remarks.lower():
+                item_purchase_summary.append({
+                    'receipt': payment.receipt_number,
+                    'amount': float(payment.amount),
+                    'date': payment.payment_date.strftime('%d %b %Y'),
+                    'remarks': remarks,
+                    'url': f'/portal/{schema_name}/fee/receipt/{payment.id}/',
+                })
     context = {
         'tenant': tenant, 'student': student, 'fee_records': fee_records, 'payments': payments,
         'total_fee': total_fee, 'total_paid': total_paid, 'pending_total': pending_total,
+        'item_purchase_summary': item_purchase_summary,
         'current_month': current_month,
         'current_year': current_year,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,

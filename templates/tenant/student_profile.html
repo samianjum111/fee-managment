@@ -24,9 +24,9 @@
 </div>
 
 <div class="fee-summary" id="feeSummary">
-    <div class="summary-card"><div class="summary-label">Total Fee</div><div class="summary-value" id="totalFee">—</div></div>
-    <div class="summary-card"><div class="summary-label">Total Paid</div><div class="summary-value" id="totalPaid">—</div></div>
-    <div class="summary-card"><div class="summary-label">Pending</div><div class="summary-value pending" id="pendingTotal">—</div></div>
+    <div class="summary-card"><div class="summary-label">Total Fee</div><div class="summary-value" id="totalFee">₹{{ total_fee|floatformat:2 }}</div></div>
+    <div class="summary-card"><div class="summary-label">Total Paid</div><div class="summary-value" id="totalPaid">₹{{ total_paid|floatformat:2 }}</div></div>
+    <div class="summary-card"><div class="summary-label">Pending</div><div class="summary-value pending" id="pendingTotal">₹{{ pending_total|floatformat:2 }}</div></div>
 </div>
 
 <div class="table-card">
@@ -36,7 +36,19 @@
     <div class="table-responsive">
         <table class="data-table" id="feeTable">
             <thead><tr><th>Month/Year</th><th>Amount</th><th>Paid</th><th>Status</th><th>Receipt</th></tr></thead>
-            <tbody id="feeTableBody"><tr><td colspan="5" class="loading-row">Loading...</td></tr></tbody>
+            <tbody id="feeTableBody">
+                {% for r in fee_records %}
+                <tr>
+                    <td>{{ r.month }}/{{ r.year }}</td>
+                    <td>₹{{ r.amount|floatformat:2 }}</td>
+                    <td>₹{{ r.paid_amount|floatformat:2 }}</td>
+                    <td><span class="status-badge status-{{ r.status|lower }}">{{ r.get_status_display }}</span></td>
+                    <td>{% if r.payments.exists %}{% for rc in r.payments.all %}<a href="/portal/{{ tenant.schema_name }}/fee/receipt/{{ rc.id }}/" class="receipt-link">{{ rc.receipt_number }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="empty-row">No fee records found. Click "Generate Current Month Fee" to create.</td></tr>
+                {% endfor %}
+            </tbody>
         </table>
     </div>
 </div>
@@ -47,12 +59,38 @@
         <div class="table-card">
             <h3 class="section-title">Item Purchases</h3>
             <p class="page-desc">This panel shows item-related charges captured during fee collection.</p>
-            <div id="itemPurchaseSummary" class="empty-row">No item purchases yet.</div>
+            <div id="itemPurchaseSummary" class="item-summary-box">
+                {% if item_purchase_summary %}
+                    {% for item in item_purchase_summary %}
+                        <div class="remark-chip">{{ item.receipt|default:'Receipt' }}</div>
+                        <strong>₹{{ item.amount|floatformat:2 }}</strong> • {{ item.date }}<br>
+                        {{ item.remarks|default:'Item purchase recorded during fee collection.' }}<br>
+                        <a href="{{ item.url }}" class="receipt-link" target="_blank">View receipt</a>
+                        {% if not forloop.last %}<br><br>{% endif %}
+                    {% empty %}
+                        No item purchases yet.
+                    {% endfor %}
+                {% else %}
+                    No item purchases yet.
+                {% endif %}
+            </div>
         </div>
 
         <table class="data-table" id="paymentTable">
             <thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Remarks</th><th>Receipt</th></tr></thead>
-            <tbody id="paymentTableBody"><tr><td colspan="4" class="loading-row">Loading...</td></tr></tbody>
+            <tbody id="paymentTableBody">
+                {% for p in payments %}
+                <tr>
+                    <td>{{ p.payment_date|date:"Y-m-d" }}</td>
+                    <td>₹{{ p.amount|floatformat:2 }}</td>
+                    <td>{{ p.get_payment_mode_display }}</td>
+                    <td>{{ p.remarks|default:'—' }}</td>
+                    <td><a href="/portal/{{ tenant.schema_name }}/fee/receipt/{{ p.id }}/" class="receipt-link" target="_blank">{{ p.receipt_number }}</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="empty-row">No payments recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
         </table>
     </div>
 </div>
@@ -194,7 +232,6 @@ async function loadPayments() {
         const tbody = document.getElementById('paymentTableBody');
         const summaryBox = document.getElementById('itemPurchaseSummary');
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No payments recorded yet.</td></tr>';
             if (summaryBox) summaryBox.innerHTML = 'No item purchases yet.';
             return;
         }
@@ -219,7 +256,7 @@ async function loadPayments() {
         }
     } catch(e) {
         console.error('Payment load error:', e);
-        document.getElementById('paymentTableBody').innerHTML = '<tr><td colspan="5" class="empty-row">Error loading payment history: ' + e.message + '</td></tr>';
+        // Keep the server-rendered data if the API is unavailable.
     }
 }
 

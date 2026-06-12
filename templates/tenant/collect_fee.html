@@ -79,6 +79,10 @@
                 <label>Selected Items</label>
                 <div class="pill-badge" id="feeItemSummary">₹0.00</div>
             </div>
+            <div class="form-field">
+                <label>Total Due (Pending + Items)</label>
+                <div class="pill-badge" id="totalDueSummary">₹{{ total_pending|floatformat:2 }}</div>
+            </div>
             <div class="form-field submit-field">
                 <button type="submit" class="btn-primary">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
@@ -175,8 +179,24 @@ const studentId = {{ student.id }};
 const totalPendingSpan = document.getElementById('totalPending');
 const amountInput = document.getElementById('amountInput');
 const remainingSpan = document.getElementById('remainingAfter');
+const totalDueSummary = document.getElementById('totalDueSummary');
 const itemCart = {};
 function formatMoney(v) { return '₹' + Number(v).toFixed(2); }
+function getBasePendingTotal() {
+    const raw = totalPendingSpan ? totalPendingSpan.innerText : '0';
+    return Number(raw) || 0;
+}
+function updateDueSummary() {
+    const pending = getBasePendingTotal();
+    const itemTotal = Number(document.getElementById('cartTotal')?.textContent || 0);
+    const totalDue = pending + itemTotal;
+    if (totalDueSummary) totalDueSummary.textContent = formatMoney(totalDue);
+    if (amountInput && remainingSpan) {
+        const paid = parseFloat(amountInput.value) || 0;
+        const remaining = Math.max(totalDue - paid, 0);
+        remainingSpan.value = formatMoney(remaining);
+    }
+}
 function syncItemCart() {
     const cartItems = document.getElementById('cartItems');
     const cartCount = document.getElementById('cartCount');
@@ -203,6 +223,7 @@ function syncItemCart() {
     cartTotal.textContent = total.toFixed(2);
     feeItemSummary.textContent = formatMoney(total);
     productItemsJson.value = JSON.stringify(entries.map(e => ({ product_id: e.id, quantity: e.qty })));
+    updateDueSummary();
 }
 function addToCart(id) {
     const card = document.querySelector('.item-card[data-product-id="' + id + '"]');
@@ -233,12 +254,9 @@ document.querySelectorAll('.add-item-btn').forEach(btn => {
         if (card) addToCart(Number(card.dataset.productId));
     });
 });
-if (amountInput && totalPendingSpan) {
-    const total = parseFloat(totalPendingSpan.innerText);
+if (amountInput && remainingSpan) {
     amountInput.addEventListener('input', function() {
-        const paid = parseFloat(this.value) || 0;
-        const remaining = total - paid;
-        remainingSpan.value = remaining > 0 ? `₹${remaining.toFixed(2)}` : '₹0.00';
+        updateDueSummary();
     });
     amountInput.dispatchEvent(new Event('input'));
 }
