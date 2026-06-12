@@ -32,7 +32,7 @@ def require_tenant_type(allowed_types):
     return decorator
 
 
-from .models import SchoolClient, Student, FeeStructure, FeeRecord, PaymentTransaction, SchoolFeeSettings
+from .models import SchoolClient, Student, FeeStructure, FeeRecord, PaymentTransaction, SchoolFeeSettings, Product, ProductCategory
 from .forms import StudentForm, FeeCollectionForm, FeeSettingsForm, FeeStructureForm, FamilyPaymentForm
 
 def local_time_str(dt):
@@ -151,9 +151,24 @@ def student_profile(request, schema_name, student_id):
         total_paid = payments_qs.aggregate(Sum('amount'))['amount__sum'] or 0
         payments = list(payments_qs)
         pending_total = total_fee - total_paid
+        item_purchase_summary = []
+        item_purchase_total = Decimal('0.00')
+        for payment in payments:
+            remarks = (payment.remarks or '').strip()
+            if 'items sold' in remarks.lower():
+                item_purchase_total += payment.amount
+                item_purchase_summary.append({
+                    'receipt': payment.receipt_number,
+                    'amount': float(payment.amount),
+                    'date': payment.payment_date.strftime('%d %b %Y'),
+                    'remarks': remarks,
+                    'url': f'/portal/{schema_name}/fee/receipt/{payment.id}/',
+                })
     context = {
         'tenant': tenant, 'student': student, 'fee_records': fee_records, 'payments': payments,
         'total_fee': total_fee, 'total_paid': total_paid, 'pending_total': pending_total,
+        'item_purchase_total': item_purchase_total,
+        'item_purchase_summary': item_purchase_summary,
         'current_month': current_month,
         'current_year': current_year,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
@@ -166,10 +181,25 @@ def fee_receipt(request, schema_name, receipt_id):
     with schema_context(schema_name):
         payment = get_object_or_404(PaymentTransaction.objects.select_related('student'), id=receipt_id)
         fee_records = list(payment.fee_records.all())
+        item_breakdown = []
+        remarks = payment.remarks or ''
+        import re
+
+        marker_match = re.search(r'items sold\s*:\s*(.*)', remarks, flags=re.IGNORECASE)
+        if not marker_match:
+            marker_match = re.search(r'items sold\s+(.*)', remarks, flags=re.IGNORECASE)
+
+        if marker_match:
+            raw = marker_match.group(1)
+            for chunk in raw.split(';'):
+                chunk = chunk.strip().strip('.').strip()
+                if chunk:
+                    item_breakdown.append(chunk)
         context = {
             'tenant': tenant,
             'payment': payment,
             'fee_records': fee_records,
+            'item_breakdown': item_breakdown,
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
     return render(request, 'tenant/receipt.html', context)
@@ -350,49 +380,112 @@ def fee_collection(request, schema_name, student_id=None):
         # Handle POST payment (works for both list and student views)
         if request.method == 'POST':
             student_id_post = request.POST.get('student_id')
-            amount = request.POST.get('amount')
+            amount_raw = request.POST.get('amount')
             payment_mode = request.POST.get('payment_mode')
             remarks = request.POST.get('remarks', '')
-            if student_id_post and amount:
+            product_items_raw = request.POST.get('product_items_json', '[]')
+            try:
+                product_items = json.loads(product_items_raw or '[]')
+            except Exception:
+                product_items = []
+
+            if student_id_post and amount_raw:
                 try:
                     student = Student.objects.get(id=student_id_post)
-                    amount = Decimal(amount)
+                    amount = Decimal(amount_raw)
+
+                    product_total = Decimal('0.00')
+                    item_breakdown = []
+                    for item in product_items:
+                        try:
+                            product_id = int(item.get('product_id'))
+                            qty = int(item.get('quantity', 0))
+                        except (TypeError, ValueError):
+                            continue
+                        if qty <= 0:
+                            continue
+
+                        product = Product.objects.filter(id=product_id).first()
+                        if not product:
+                            raise ValueError(f"Product {product_id} not found")
+                        if product.quantity < qty:
+                            raise ValueError(f"Only {product.quantity} units available for {product.name}")
+
+                        line_total = product.selling_price * qty
+                        product_total += line_total
+                        item_breakdown.append((product, qty, line_total))
+
                     pending_records = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
                     total_pending = sum(r.remaining for r in pending_records)
-                    if amount > total_pending:
-                        messages.error(request, f"Amount exceeds total pending (₹{total_pending})")
-                        return redirect('fee_collection', schema_name=schema_name, student_id=student.id)
-                    remaining = amount
+                    total_due = Decimal(total_pending) + product_total
+
+                    amount_received = amount
+                    fee_to_apply = min(amount_received, Decimal(total_pending)) if total_pending else Decimal('0.00')
+                    amount_left = amount_received - fee_to_apply
+                    item_to_apply = min(amount_left, product_total) if product_total else Decimal('0.00')
+
+                    remaining = fee_to_apply
                     paid_records = []
                     for record in pending_records:
                         if remaining <= 0:
                             break
                         due = record.remaining
-                        if remaining >= due:
-                            record.paid_amount = record.amount
-                            remaining -= due
-                        else:
-                            record.paid_amount += remaining
-                            remaining = 0
+                        apply_now = min(due, remaining)
+                        record.paid_amount += apply_now
+                        remaining -= apply_now
                         record.save()
                         paid_records.append(record)
-                    payment = PaymentTransaction.objects.create(
-                        student=student,
-                        amount=amount,
-                        payment_mode=payment_mode,
-                        payment_type='full' if remaining == 0 else 'partial',
-                        remarks=remarks,
-                        created_by=request.session.get('school_admin_username', 'admin')
-                    )
-                    payment.fee_records.set(paid_records)
-                    messages.success(request, f"Payment of ₹{amount} received. Receipt: {payment.receipt_number}")
-                    return redirect('fee_receipt', schema_name=schema_name, receipt_id=payment.id)
+
+                    item_details = '; '.join([
+                        f"{product.name} x{qty} @ ₹{product.selling_price} = ₹{line_total}"
+                        for product, qty, line_total in item_breakdown
+                    ]) if item_breakdown else ''
+
+                    combined_remarks = (remarks or '').strip()
+                    if fee_to_apply > 0 and item_breakdown:
+                        combined_remarks = (combined_remarks + '\n' if combined_remarks else '') + (
+                            f"Fee payment applied: ₹{fee_to_apply:.2f}. Items sold: {item_details}"
+                        )
+                    elif fee_to_apply > 0:
+                        combined_remarks = combined_remarks or 'Fee payment'
+                    elif item_breakdown:
+                        combined_remarks = (combined_remarks + '\n' if combined_remarks else '') + ('Items sold: ' + item_details)
+
+                    payment_record = None
+                    if amount_received > 0:
+                        payment_record = PaymentTransaction.objects.create(
+                            student=student,
+                            amount=amount_received,
+                            payment_mode=payment_mode,
+                            payment_type='full' if amount_received >= total_due else 'partial',
+                            remarks=combined_remarks or 'Fee and item payment',
+                            created_by=request.session.get('school_admin_username', 'admin')
+                        )
+                        if paid_records:
+                            payment_record.fee_records.set(paid_records)
+
+                        if item_breakdown:
+                            for product, qty, _ in item_breakdown:
+                                product.quantity -= qty
+                                product.save(update_fields=['quantity'])
+
+                    if amount_received > total_due:
+                        messages.info(request, f'Payment received exceeds total due by ₹{(amount_received - total_due):.2f}.')
+                    elif amount_received < total_due:
+                        messages.info(request, f'Amount received covers pending fee and selected items partially. Remaining balance: ₹{(total_due - amount_received):.2f}.')
+
+                    if payment_record:
+                        messages.success(request, f"Payment recorded successfully. Receipt: {payment_record.receipt_number}")
+                        return redirect('fee_receipt', schema_name=schema_name, receipt_id=payment_record.id)
+
+                    messages.success(request, 'Payment recorded.')
+                    return redirect('fee_collection', schema_name=schema_name, student_id=student.id)
                 except Student.DoesNotExist:
-                    messages.error(request, "Student not found")
+                    messages.error(request, 'Student not found')
                 except Exception as e:
-                    messages.error(request, f"Error processing payment: {str(e)}")
+                    messages.error(request, f'Error processing payment: {str(e)}')
             else:
-                messages.error(request, "Invalid payment data")
+                messages.error(request, 'Invalid payment data')
             return redirect('fee_collection', schema_name=schema_name)
 
         # ---------- GET request ----------
@@ -402,11 +495,15 @@ def fee_collection(request, schema_name, student_id=None):
                 student = Student.objects.get(id=student_id)
                 pending_records = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
                 total_pending = sum(r.remaining for r in pending_records)
+                products = list(Product.objects.select_related('category').filter(quantity__gt=0).order_by('category__name', 'name'))
+                categories = list(ProductCategory.objects.all().order_by('name'))
                 context = {
                     'tenant': tenant,
                     'student': student,
                     'pending_records': pending_records,
                     'total_pending': total_pending,
+                    'products': products,
+                    'categories': categories,
                     'logo_url': tenant.school_logo.url if tenant.school_logo else None,
                 }
                 return render(request, 'tenant/collect_fee.html', context)
@@ -447,6 +544,8 @@ def fee_collection(request, schema_name, student_id=None):
         recent_payments = list(PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:5])
         grades = list(Student.objects.values_list('grade', flat=True).distinct().order_by('grade'))
         sections = list(Student.objects.values_list('section', flat=True).distinct().order_by('section'))
+        products = list(Product.objects.select_related('category').filter(quantity__gt=0).order_by('category__name', 'name'))
+        categories = list(ProductCategory.objects.all().order_by('name'))
 
         context = {
             'tenant': tenant,
@@ -456,6 +555,8 @@ def fee_collection(request, schema_name, student_id=None):
             'total_payments_count': total_payments_count,
             'grades': grades,
             'sections': sections,
+            'products': products,
+            'categories': categories,
             'search_filter': search_filter,
             'grade_filter': grade_filter,
             'section_filter': section_filter,
@@ -885,6 +986,7 @@ def student_payments_api(request, schema_name, student_id):
                 'amount': float(p.amount),
                 'date': p.payment_date.isoformat(),
                 'mode': p.get_payment_mode_display(),
+                'remarks': p.remarks or '',
                 'url': f'/portal/{schema_name}/fee/receipt/{p.id}/'
             })
         return JsonResponse(payments, safe=False)
@@ -1987,27 +2089,181 @@ def gym_attendance(request, schema_name):
     from django_tenants.utils import schema_context
 
 
+def _extract_item_sales_from_remarks(remarks):
+    """Extract item sale chunks from payment remarks for analytics and detail pages."""
+    import re
+    from decimal import Decimal
+
+    text = remarks or ''
+    marker_match = re.search(r'items sold\s*:\s*(.*)', text, flags=re.IGNORECASE)
+    if not marker_match:
+        marker_match = re.search(r'items sold\s+(.*)', text, flags=re.IGNORECASE)
+
+    candidate_text = marker_match.group(1) if marker_match else text
+    pattern = re.compile(
+        r'(?P<name>.+?)\s*x\s*(?P<qty>\d+)\s*@\s*₹\s*(?P<price>\d+(?:\.\d+)?)\s*=\s*₹\s*(?P<total>\d+(?:\.\d+)?)',
+        flags=re.IGNORECASE,
+    )
+
+    items = []
+    for chunk in re.split(r';\s*', candidate_text):
+        chunk = chunk.strip().strip('.').strip()
+        if not chunk:
+            continue
+        match = pattern.search(chunk)
+        if not match:
+            continue
+        items.append({
+            'name': match.group('name').strip(),
+            'quantity': int(match.group('qty')),
+            'unit_price': Decimal(match.group('price')),
+            'line_total': Decimal(match.group('total')),
+            'raw': chunk,
+        })
+    return items
+
+
 # ==================== STOCK MANAGEMENT VIEWS ====================
 
 @require_tenant_type(['school'])
 def stock_management(request, schema_name):
-    """Main stock management page: list categories and products."""
-    from django.shortcuts import render, redirect, get_object_or_404
-    from django.contrib import messages
+    """Main stock management page: list categories and products (RAW SQL)."""
+    from django.shortcuts import render
+    from django.db import connection
     from .models import ProductCategory, Product
     from django_tenants.utils import schema_context
 
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
-        categories = ProductCategory.objects.all().order_by('name')
-        products = Product.objects.select_related('category').all().order_by('category__name', 'name')
+        # RAW SQL for categories
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id, name, description FROM axis_saas_productcategory ORDER BY name")
+            raw_cats = cursor.fetchall()
+
+        # RAW SQL for products
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT p.id, p.name, p.sku, p.selling_price, p.quantity, p.notes,
+                       c.id as category_id, c.name as category_name
+                FROM axis_saas_product p
+                JOIN axis_saas_productcategory c ON p.category_id = c.id
+                ORDER BY c.name, p.name
+            """)
+            raw_products = cursor.fetchall()
+
+        products_qs = Product.objects.select_related('category').all().order_by('category__name', 'name')
+        total_products = products_qs.count()
+        total_categories = ProductCategory.objects.count()
+        total_stock_value = sum((p.selling_price * p.quantity) for p in products_qs)
+        low_stock_count = products_qs.filter(quantity__lt=10).count()
+
+        item_sales = []
+        total_units_sold = 0
+        total_sales_value = Decimal('0.00')
+        
+        product_sales = defaultdict(lambda: {'units': 0, 'value': Decimal('0.00'), 'last_sale': None, 'id': None})
+        # Cache product ids by name
+        product_id_cache = {}
+        for payment in PaymentTransaction.objects.filter(remarks__icontains='items sold').select_related('student').order_by('-payment_date')[:100]:
+            for item in _extract_item_sales_from_remarks(payment.remarks):
+                total_units_sold += item['quantity']
+                total_sales_value += item['line_total']
+                item_sales.append({
+                    'payment': payment,
+                    'item': item,
+                    'student': payment.student,
+                })
+                name = item['name'].strip().lower()
+                entry = product_sales[name]
+                entry['units'] += item['quantity']
+                entry['value'] += item['line_total']
+                if entry['last_sale'] is None or payment.payment_date > entry['last_sale']:
+                    entry['last_sale'] = payment.payment_date
+                # Get product id if not already cached
+                if entry['id'] is None and name not in product_id_cache:
+                    # Try to find the product by exact name (case insensitive)
+                    prod = Product.objects.filter(name__iexact=name).first()
+                    if prod:
+                        product_id_cache[name] = prod.id
+                    else:
+                        product_id_cache[name] = None
+                if entry['id'] is None and name in product_id_cache:
+                    entry['id'] = product_id_cache[name]
+
+        top_items = []
+        for name, values in product_sales.items():
+            top_items.append({
+                'name': name.title(),
+                'units': values['units'],
+                'value': values['value'],
+                'last_sale': values['last_sale'],
+                'id': values['id'],   # could be None
+            })
+    
+        
+
         context = {
             'tenant': tenant,
-            'categories': categories,
-            'products': products,
+            'raw_cats': raw_cats,
+            'raw_products': raw_products,
+            'analytics': {
+                'total_products': total_products,
+                'total_categories': total_categories,
+                'total_stock_value': total_stock_value,
+                'low_stock_count': low_stock_count,
+                'total_units_sold': total_units_sold,
+                'total_sales_value': total_sales_value,
+            },
+            'recent_sales': item_sales[:10],
+            'top_items': top_items,
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
     return render(request, 'tenant/stock_management.html', context)
+
+@require_tenant_type(['school'])
+def product_detail(request, schema_name, product_id):
+    """Detailed product analytics page with sales history and recent receipts."""
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        product = get_object_or_404(Product.objects.select_related('category'), id=product_id)
+        sales_events = []
+        total_units_sold = 0
+        total_sales_value = Decimal('0.00')
+
+        last_sale_date = None
+        buyer_info = {}  # id -> name
+        for payment in PaymentTransaction.objects.filter(remarks__icontains='items sold').select_related('student').order_by('-payment_date'):
+            for item in _extract_item_sales_from_remarks(payment.remarks):
+                if item['name'].strip().lower() != product.name.strip().lower():
+                    continue
+                total_units_sold += item['quantity']
+                total_sales_value += item['line_total']
+                sales_events.append({
+                    'payment': payment,
+                    'item': item,
+                    'student': payment.student,
+                })
+                if payment.student:
+                    buyer_info[payment.student.id] = payment.student.name
+                if last_sale_date is None or payment.payment_date > last_sale_date:
+                    last_sale_date = payment.payment_date
+
+        context = {
+            'tenant': tenant,
+            'product': product,
+            'sales_events': sales_events[:50],
+            'analytics': {
+                'total_units_sold': total_units_sold,
+                'total_sales_value': total_sales_value,
+                'stock_value': product.selling_price * product.quantity,
+                'low_stock': product.quantity < 10,
+                'last_sale_date': last_sale_date,
+                'average_sale_value': (total_sales_value / total_units_sold) if total_units_sold else Decimal('0.00'),
+            },
+            'recent_buyers': 'recent_buyers': [{'id': sid, 'name': name} for sid, name in buyer_info.items()][:8],
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+        }
+    return render(request, 'tenant/product_detail.html', context)
 
 
 @require_tenant_type(['school'])
@@ -2040,8 +2296,6 @@ def add_category(request, schema_name):
                     ProductCategory.objects.create(name=name, description=description)
                     messages.success(request, f"Category '{name}' added.")
     return redirect('stock_management', schema_name=schema_name)
-
-
 @require_tenant_type(['school'])
 def delete_category(request, schema_name, category_id):
     """Delete a category (only if no products linked)."""

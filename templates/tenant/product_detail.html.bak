@@ -31,7 +31,7 @@
         <div class="card-header"><h3>Customers Buying This Item</h3></div>
         <div class="body-pad">
             {% if recent_buyers %}
-            <ul style="margin: 0; padding-left: 1rem; line-height: 1.6;">{% for buyer in recent_buyers %}<li><a href="{% url 'student_profile' schema_name=tenant.schema_name student_id=buyer.id %}#payment-history" style="color: var(--primary); text-decoration: none;">{{ buyer.name }}</a></li>{% endfor %}</ul>
+            <ul style="margin: 0; padding-left: 1rem; line-height: 1.6;">{% for buyer in recent_buyers %}<li><a href="{% url \'student_profile\' schema_name=tenant.schema_name student_id=buyer.id %}#payment-history" style="color: var(--primary); text-decoration: none;">{{ buyer.name }}</a></li>{% endfor %}</ul>
             {% else %}
             <p class="empty-row" style="padding: 0; text-align:left;">No sales activity has been recorded for this product yet.</p>
             {% endif %}
@@ -46,7 +46,7 @@
                     {% for event in sales_events %}
                     <tr>
                         <td>{{ event.payment.payment_date|date:"d M Y" }}</td>
-                        <td><a href="{% url 'student_profile' schema_name=tenant.schema_name student_id=event.student.id %}#payment-history" style="color: var(--primary); text-decoration: none;"><a href="{% url 'student_profile' schema_name=tenant.schema_name student_id=event.student.id %}#payment-history" style="color: var(--primary); text-decoration: none;">{{ event.student.name }}</a></a></td>
+                        <td><a href="{% url \'student_profile\' schema_name=tenant.schema_name student_id=event.student.id %}#payment-history" style="color: var(--primary); text-decoration: none;"><a href="{% url \'student_profile\' schema_name=tenant.schema_name student_id=event.student.id %}#payment-history" style="color: var(--primary); text-decoration: none;">{{ event.student.name }}</a></a></td>
                         <td>{{ event.item.quantity }}</td>
                         <td>₹{{ event.item.line_total|floatformat:2 }}</td>
                         <td><a href="/portal/{{ tenant.schema_name }}/fee/receipt/{{ event.payment.id }}/" class="receipt-link">{{ event.payment.receipt_number }}</a></td>

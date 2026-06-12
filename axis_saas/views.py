@@ -2160,7 +2160,10 @@ def stock_management(request, schema_name):
         item_sales = []
         total_units_sold = 0
         total_sales_value = Decimal('0.00')
-        product_sales = defaultdict(lambda: {'units': 0, 'value': Decimal('0.00'), 'last_sale': None})
+        
+        product_sales = defaultdict(lambda: {'units': 0, 'value': Decimal('0.00'), 'last_sale': None, 'id': None})
+        # Cache product ids by name
+        product_id_cache = {}
         for payment in PaymentTransaction.objects.filter(remarks__icontains='items sold').select_related('student').order_by('-payment_date')[:100]:
             for item in _extract_item_sales_from_remarks(payment.remarks):
                 total_units_sold += item['quantity']
@@ -2176,6 +2179,16 @@ def stock_management(request, schema_name):
                 entry['value'] += item['line_total']
                 if entry['last_sale'] is None or payment.payment_date > entry['last_sale']:
                     entry['last_sale'] = payment.payment_date
+                # Get product id if not already cached
+                if entry['id'] is None and name not in product_id_cache:
+                    # Try to find the product by exact name (case insensitive)
+                    prod = Product.objects.filter(name__iexact=name).first()
+                    if prod:
+                        product_id_cache[name] = prod.id
+                    else:
+                        product_id_cache[name] = None
+                if entry['id'] is None and name in product_id_cache:
+                    entry['id'] = product_id_cache[name]
 
         top_items = []
         for name, values in product_sales.items():
@@ -2184,8 +2197,10 @@ def stock_management(request, schema_name):
                 'units': values['units'],
                 'value': values['value'],
                 'last_sale': values['last_sale'],
+                'id': values['id'],   # could be None
             })
-        top_items = sorted(top_items, key=lambda entry: (entry['units'], entry['value']), reverse=True)[:6]
+    
+        
 
         context = {
             'tenant': tenant,
@@ -2216,7 +2231,7 @@ def product_detail(request, schema_name, product_id):
         total_sales_value = Decimal('0.00')
 
         last_sale_date = None
-        buyer_names = set()
+        buyer_info = {}  # id -> name
         for payment in PaymentTransaction.objects.filter(remarks__icontains='items sold').select_related('student').order_by('-payment_date'):
             for item in _extract_item_sales_from_remarks(payment.remarks):
                 if item['name'].strip().lower() != product.name.strip().lower():
@@ -2229,7 +2244,7 @@ def product_detail(request, schema_name, product_id):
                     'student': payment.student,
                 })
                 if payment.student:
-                    buyer_names.add(payment.student.name)
+                    buyer_info[payment.student.id] = payment.student.name
                 if last_sale_date is None or payment.payment_date > last_sale_date:
                     last_sale_date = payment.payment_date
 
@@ -2245,7 +2260,7 @@ def product_detail(request, schema_name, product_id):
                 'last_sale_date': last_sale_date,
                 'average_sale_value': (total_sales_value / total_units_sold) if total_units_sold else Decimal('0.00'),
             },
-            'recent_buyers': sorted(buyer_names)[:8],
+            'recent_buyers': [{'id': sid, 'name': name} for sid, name in buyer_info.items()][:8],
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
     return render(request, 'tenant/product_detail.html', context)
