@@ -1,0 +1,467 @@
+{% extends 'tenant/base.html' %}
+{% load static %}
+{% block title %}Sell Items | {{ tenant.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Two-column layout */
+    .sell-container {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+    .main-panel {
+        flex: 2;
+        min-width: 300px;
+    }
+    .cart-panel {
+        flex: 1;
+        min-width: 320px;
+        background: var(--surface);
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        padding: 1rem;
+        position: sticky;
+        top: 1rem;
+        align-self: start;
+        max-height: calc(100vh - 2rem);
+        overflow-y: auto;
+    }
+    .student-search-card, .student-info-card, .product-grid-card {
+        background: var(--surface);
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .search-form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: flex-end;
+    }
+    .search-form .form-group {
+        flex: 1;
+        min-width: 140px;
+    }
+    .search-form label {
+        display: block;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+    .search-form input, .search-form select {
+        width: 100%;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--border);
+        background: var(--surface-alt);
+    }
+    .student-result-list {
+        margin-top: 1rem;
+        border-top: 1px solid var(--border);
+        padding-top: 0.5rem;
+    }
+    .student-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--border);
+    }
+    .student-item .select-btn {
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 2rem;
+        padding: 0.2rem 0.8rem;
+        cursor: pointer;
+    }
+    .student-details {
+        margin-bottom: 1rem;
+        background: var(--surface-alt);
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+    }
+    .pending-fee-toggle {
+        margin: 1rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    .product-card {
+        background: var(--surface-alt);
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 0.75rem;
+        transition: 0.2s;
+    }
+    .product-card h4 {
+        margin: 0.25rem 0;
+        font-size: 1rem;
+    }
+    .product-card .price {
+        font-weight: 700;
+        color: var(--primary);
+    }
+    .product-card .stock {
+        font-size: 0.7rem;
+        color: var(--muted);
+    }
+    .add-to-cart {
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 2rem;
+        padding: 0.3rem 0.6rem;
+        margin-top: 0.5rem;
+        cursor: pointer;
+        width: 100%;
+    }
+    .cart-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px dashed var(--border);
+    }
+    .cart-item-actions button {
+        background: var(--surface-alt);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        width: 28px;
+        height: 28px;
+        cursor: pointer;
+    }
+    .cart-total {
+        font-weight: 700;
+        font-size: 1.2rem;
+        text-align: right;
+        margin: 0.5rem 0;
+    }
+    .payment-form .form-field {
+        margin-bottom: 0.75rem;
+    }
+    .payment-form label {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    .payment-form input, .payment-form select {
+        width: 100%;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--border);
+        background: var(--surface-alt);
+    }
+    .btn-primary, .btn-secondary {
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+    }
+    .btn-primary {
+        background: var(--primary);
+        color: white;
+    }
+    .btn-secondary {
+        background: var(--surface-alt);
+        color: var(--text);
+        border: 1px solid var(--border);
+    }
+    .empty-row {
+        text-align: center;
+        padding: 1rem;
+        color: var(--muted);
+    }
+    .pending-records-table {
+        width: 100%;
+        font-size: 0.8rem;
+        border-collapse: collapse;
+    }
+    .pending-records-table th, .pending-records-table td {
+        padding: 0.3rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="sell-container">
+    <div class="main-panel">
+        <!-- Student Search Card -->
+        <div class="student-search-card">
+            <h3>Find Student</h3>
+            <form method="get" class="search-form">
+                <div class="form-group">
+                    <label>Search (Name/Roll/Father/CNIC/Phone)</label>
+                    <input type="text" name="search" value="{{ search_query }}" placeholder="e.g., Ali, 1001">
+                </div>
+                <div class="form-group">
+                    <label>Grade</label>
+                    <select name="grade">
+                        <option value="">All</option>
+                        {% for g in grades %}
+                        <option value="{{ g }}" {% if grade_filter == g %}selected{% endif %}>{{ g }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Section</label>
+                    <select name="section">
+                        <option value="">All</option>
+                        {% for s in sections %}
+                        <option value="{{ s }}" {% if section_filter == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary">Search</button>
+                {% if search_query or grade_filter or section_filter %}
+                <a href="{% url 'sell_items' schema_name=tenant.schema_name %}" class="btn-secondary">Clear</a>
+                {% endif %}
+            </form>
+            {% if search_results %}
+            <div class="student-result-list">
+                <strong>{{ search_results|length }} student(s) found:</strong>
+                {% for s in search_results %}
+                <div class="student-item">
+                    <div><strong>{{ s.name }}</strong> ({{ s.roll_number }})<br><small>{{ s.grade }} - {{ s.section }} | {{ s.father_name }}</small></div>
+                    <a href="?student_id={{ s.id }}" class="select-btn">Select</a>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        {% if selected_student %}
+        <!-- Student Info & Pending Fees -->
+        <div class="student-info-card">
+            <div class="student-details">
+                <h3>{{ selected_student.name }} ({{ selected_student.roll_number }})</h3>
+                <p>{{ selected_student.grade }} - {{ selected_student.section }} | Father: {{ selected_student.father_name }}</p>
+                <p>CNIC: {{ selected_student.father_cnic }} | Phone: {{ selected_student.parent_mobile }}</p>
+            </div>
+            <div class="pending-fee-toggle">
+                <input type="checkbox" id="includePending" checked>
+                <label for="includePending">Include pending fees in total due</label>
+            </div>
+            <div id="pendingFeeContainer">
+                <h4>Pending Fee Records</h4>
+                {% if pending_records %}
+                <table class="pending-records-table">
+                    <thead><tr><th>Month/Year</th><th>Amount</th><th>Paid</th><th>Remaining</th></tr></thead>
+                    <tbody>
+                        {% for fr in pending_records %}
+                        <tr>
+                            <td>{{ fr.month }}/{{ fr.year }}</td>
+                            <td>₹{{ fr.amount|floatformat:2 }}</td>
+                            <td>₹{{ fr.paid_amount|floatformat:2 }}</td>
+                            <td class="remaining">₹{{ fr.remaining|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <p><strong>Total Pending: ₹<span id="totalPending">{{ total_pending|floatformat:2 }}</span></strong></p>
+                {% else %}
+                <p class="empty-row">No pending fees for this student.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Products Grid -->
+        <div class="product-grid-card">
+            <h3>Select Items</h3>
+            <div class="product-grid" id="productGrid">
+                {% for product in products %}
+                <div class="product-card" data-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.selling_price }}" data-stock="{{ product.quantity }}">
+                    <div class="product-chip">{{ product.category.name }}</div>
+                    <h4>{{ product.name }}</h4>
+                    <p class="price">₹{{ product.selling_price|floatformat:2 }}</p>
+                    <p class="stock">Stock: {{ product.quantity }}</p>
+                    <button class="add-to-cart" data-id="{{ product.id }}">Add to Cart</button>
+                </div>
+                {% empty %}
+                <div class="empty-row">No products available. Add items in Stock Management first.</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="cart-panel">
+        <h3>Cart</h3>
+        <div id="cartItems">No items selected.</div>
+        <div class="cart-total">Item Total: ₹<span id="cartTotal">0.00</span></div>
+        <div class="cart-total">Pending Fee: ₹<span id="pendingTotalDisplay">0.00</span></div>
+        <div class="cart-total">Total Due: ₹<span id="totalDue">0.00</span></div>
+        <hr>
+        <form method="post" id="paymentForm" style="display: none;">
+            {% csrf_token %}
+            <input type="hidden" name="process_payment" value="1">
+            <input type="hidden" name="student_id" value="{{ selected_student.id }}">
+            <input type="hidden" name="product_items_json" id="productItemsJson" value="[]">
+            <input type="hidden" name="include_pending" id="includePendingHidden" value="on">
+            <div class="form-field">
+                <label>Amount Received (₹)</label>
+                <input type="number" name="amount" id="amountInput" step="0.01" required>
+            </div>
+            <div class="form-field">
+                <label>Payment Mode</label>
+                <select name="payment_mode">
+                    <option value="cash">Cash</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="online">Online</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label>Remarks (Optional)</label>
+                <textarea name="remarks" rows="2"></textarea>
+            </div>
+            <button type="submit" class="btn-primary">Process Payment</button>
+        </form>
+        <div id="noStudentMsg" class="empty-row" style="display: {% if selected_student %}none{% else %}block{% endif %};">
+            Select a student to start selling.
+        </div>
+    </div>
+</div>
+
+<script>
+    // Cart state
+    let cart = {};
+    let selectedStudentId = {{ selected_student.id|default:'null' }};
+    let totalPending = parseFloat('{{ total_pending|default:0 }}');
+    const includePendingCheckbox = document.getElementById('includePending');
+    const cartTotalSpan = document.getElementById('cartTotal');
+    const pendingTotalDisplay = document.getElementById('pendingTotalDisplay');
+    const totalDueSpan = document.getElementById('totalDue');
+    const cartContainer = document.getElementById('cartItems');
+    const paymentForm = document.getElementById('paymentForm');
+    const productItemsJson = document.getElementById('productItemsJson');
+    const amountInput = document.getElementById('amountInput');
+    const includePendingHidden = document.getElementById('includePendingHidden');
+
+    function updateCartUI() {
+        let total = 0;
+        let html = '';
+        for (let id in cart) {
+            const item = cart[id];
+            total += item.price * item.qty;
+            html += `<div class="cart-item">
+                        <div><strong>${item.name}</strong><br><small>${item.qty} × ₹${item.price.toFixed(2)}</small></div>
+                        <div class="cart-item-actions">
+                            <button onclick="changeQty(${id}, -1)">-</button>
+                            <span>${item.qty}</span>
+                            <button onclick="changeQty(${id}, 1)">+</button>
+                            <button onclick="removeItem(${id})">×</button>
+                        </div>
+                    </div>`;
+        }
+        if (Object.keys(cart).length === 0) {
+            cartContainer.innerHTML = 'No items selected.';
+        } else {
+            cartContainer.innerHTML = html;
+        }
+        cartTotalSpan.innerText = total.toFixed(2);
+        updateTotalDue();
+    }
+
+    function updateTotalDue() {
+        let itemTotal = parseFloat(cartTotalSpan.innerText);
+        let include = includePendingCheckbox.checked;
+        let pending = include ? totalPending : 0;
+        pendingTotalDisplay.innerText = pending.toFixed(2);
+        let totalDue = itemTotal + pending;
+        totalDueSpan.innerText = totalDue.toFixed(2);
+        if (amountInput) amountInput.placeholder = `Enter amount (total due: ₹${totalDue.toFixed(2)})`;
+        // Update hidden field for include_pending
+        if (includePendingHidden) includePendingHidden.value = include ? 'on' : 'off';
+    }
+
+    window.changeQty = function(productId, delta) {
+        if (!cart[productId]) return;
+        let newQty = cart[productId].qty + delta;
+        if (newQty <= 0) {
+            delete cart[productId];
+        } else {
+            const maxStock = cart[productId].stock;
+            if (newQty > maxStock) {
+                alert(`Only ${maxStock} units available.`);
+                return;
+            }
+            cart[productId].qty = newQty;
+        }
+        updateCartUI();
+        syncCartToForm();
+    };
+
+    window.removeItem = function(productId) {
+        delete cart[productId];
+        updateCartUI();
+        syncCartToForm();
+    };
+
+    function syncCartToForm() {
+        const itemsArray = Object.values(cart).map(item => ({
+            product_id: item.id,
+            quantity: item.qty
+        }));
+        productItemsJson.value = JSON.stringify(itemsArray);
+    }
+
+    // Add to cart
+    document.querySelectorAll('.add-to-cart').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const card = btn.closest('.product-card');
+            const id = parseInt(card.dataset.id);
+            const name = card.dataset.name;
+            const price = parseFloat(card.dataset.price);
+            const stock = parseInt(card.dataset.stock);
+            if (!cart[id]) {
+                cart[id] = { id, name, price, qty: 0, stock };
+            }
+            if (cart[id].qty + 1 > stock) {
+                alert(`Only ${stock} units available.`);
+                return;
+            }
+            cart[id].qty += 1;
+            updateCartUI();
+            syncCartToForm();
+        });
+    });
+
+    // When include pending checkbox toggles
+    if (includePendingCheckbox) {
+        includePendingCheckbox.addEventListener('change', updateTotalDue);
+        updateTotalDue();
+    }
+
+    // Show payment form only if student selected
+    if (selectedStudentId) {
+        paymentForm.style.display = 'block';
+    } else {
+        paymentForm.style.display = 'none';
+    }
+
+    // Recalculate total due when amount input changes? Not needed; just for display.
+    if (amountInput) {
+        amountInput.addEventListener('input', function() {
+            // optional: show remaining after payment
+            let totalDue = parseFloat(totalDueSpan.innerText);
+            let paid = parseFloat(this.value) || 0;
+            let remaining = totalDue - paid;
+            if (remaining < 0) remaining = 0;
+            this.setCustomValidity?.(remaining < 0 ? 'Amount exceeds total due' : '');
+        });
+    }
+</script>
+{% endblock %}

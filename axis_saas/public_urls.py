@@ -7,7 +7,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 
 from .models import SchoolClient
 
-from .views import gym_generate_subscription, gym_cancel_subscription, gym_update_subscription, gym_edit_attendance, add_student, dashboard, debug_payments_api, defaulters, edit_student, family_payment, fee_collection, fee_receipt, fee_settings, fee_status_api, fee_structure, gym_attendance, gym_checkin_api, gym_checkout_api, gym_customer_add, gym_customer_edit, gym_customer_list, gym_customer_profile, gym_dashboard, gym_payment, gym_receipt, gym_reports, gym_settings, manual_generate_api, manual_generate_single_api, reports, settings, student_fee_records_api, student_list, student_payments_api, student_current_fee_status_api, student_profile, student_search_api, gym_revenue_stats_api, gym_attendance_stats_api, gym_customers_list_api, gym_customer_detail_api, gym_subscription_status_api, gym_attendance_data_api, gym_eligible_customers_api, gym_search_customer_api, gym_export_attendance_api, stock_management, product_detail, add_category, delete_category, add_product, delete_product
+from .views import gym_generate_subscription, gym_cancel_subscription, gym_update_subscription, gym_edit_attendance, add_student, dashboard, debug_payments_api, defaulters, edit_student, family_payment, fee_collection, fee_receipt, fee_settings, fee_status_api, fee_structure, gym_attendance, gym_checkin_api, gym_checkout_api, gym_customer_add, gym_customer_edit, gym_customer_list, gym_customer_profile, gym_dashboard, gym_payment, gym_receipt, gym_reports, gym_settings, manual_generate_api, manual_generate_single_api, reports, settings, student_fee_records_api, student_list, student_payments_api, student_current_fee_status_api, student_profile, student_search_api, gym_revenue_stats_api, gym_attendance_stats_api, gym_customers_list_api, gym_customer_detail_api, gym_subscription_status_api, gym_attendance_data_api, gym_eligible_customers_api, gym_search_customer_api, gym_export_attendance_api, stock_management, product_detail, add_category, delete_category, add_product, delete_product, sell_separately
 
 def saas_homepage(request):
     return HttpResponse('''
@@ -229,4 +229,7 @@ urlpatterns = [
     path('portal/<slug:schema_name>/stock/category/delete/<int:category_id>/', portal_wrapper(login_required_for_schema(delete_category)), name='delete_category'),
     path('portal/<slug:schema_name>/stock/product/add/', portal_wrapper(login_required_for_schema(add_product)), name='add_product'),
     path('portal/<slug:schema_name>/stock/product/delete/<int:product_id>/', portal_wrapper(login_required_for_schema(delete_product)), name='delete_product'),
+
+    # ===== SELL SEPARATELY (standalone student search) =====
+    path('portal/<slug:schema_name>/sell/', portal_wrapper(login_required_for_schema(sell_separately)), name='sell_separately'),
 ]

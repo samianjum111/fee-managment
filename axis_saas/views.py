@@ -2392,3 +2392,44 @@ def delete_product(request, schema_name, product_id):
 # but the functions contain their own imports; however, we need to make sure the decorator @require_tenant_type
 # and get_tenant are available. They are already defined at the top of views.py.
 # Also ensure that SchoolClient is imported if needed inside functions. We'll import inside each function.
+
+# ==================== SELL SEPARATELY (standalone student search) ====================
+@require_tenant_type(['school'])
+def sell_separately(request, schema_name):
+    """Page to search for a student and then redirect to fee collection for that student."""
+    tenant = get_tenant(request, schema_name)
+    search_query = request.GET.get('search', '').strip()
+    grade_filter = request.GET.get('grade', '')
+    section_filter = request.GET.get('section', '')
+    selected_student = None
+    search_results = []
+
+    with schema_context(schema_name):
+        if search_query:
+            students = Student.objects.filter(
+                Q(name__icontains=search_query) |
+                Q(roll_number__icontains=search_query) |
+                Q(father_name__icontains=search_query) |
+                Q(father_cnic__icontains=search_query) |
+                Q(parent_mobile__icontains=search_query)
+            )
+            if grade_filter:
+                students = students.filter(grade=grade_filter)
+            if section_filter:
+                students = students.filter(section=section_filter)
+            search_results = list(students.order_by('name')[:20])
+
+        grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
+        sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')
+
+    context = {
+        'tenant': tenant,
+        'search_query': search_query,
+        'grade_filter': grade_filter,
+        'section_filter': section_filter,
+        'search_results': search_results,
+        'grades': grades,
+        'sections': sections,
+        'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+    }
+    return render(request, 'tenant/sell_separately.html', context)
