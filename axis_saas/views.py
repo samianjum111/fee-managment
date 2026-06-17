@@ -1602,12 +1602,16 @@ def gym_settings(request, schema_name):
         return render(request, 'tenant/gym_settings.html', context)
 
 
+
+
+
+
+
 @require_tenant_type(['gym'])
 def gym_attendance(request, schema_name):
     """Attendance management page."""
     from django.shortcuts import render
     from django_tenants.utils import schema_context
-
     with schema_context(schema_name):
         context = {
             'tenant': get_tenant(request, schema_name),
@@ -1618,8 +1622,8 @@ def gym_attendance(request, schema_name):
 
 # ==================== GYM API VIEWS ====================
 
-@csrf_exempt
-@require_http_methods(["POST"])
+
+
 def gym_checkin_api(request):
     """API: Check in a gym customer (barcode or ID)."""
     from django.http import JsonResponse
@@ -2082,11 +2086,6 @@ def gym_export_attendance_api(request, schema_name):
         return response
 
 
-@require_tenant_type(['gym'])
-def gym_attendance(request, schema_name):
-    """Attendance management page."""
-    from django.shortcuts import render
-    from django_tenants.utils import schema_context
 
 
 def _extract_item_sales_from_remarks(remarks):
@@ -2380,12 +2379,7 @@ def delete_product(request, schema_name, product_id):
     return redirect('stock_management', schema_name=schema_name)
 
 
-    with schema_context(schema_name):
-        context = {
-            'tenant': get_tenant(request, schema_name),
-            'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
-        }
-        return render(request, 'tenant/gym_attendance.html', context)
+
 
 
 # Ensure all necessary imports are present at the top of views.py (this script will not modify existing imports,
