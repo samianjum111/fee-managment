@@ -181,29 +181,35 @@ def fee_receipt(request, schema_name, receipt_id):
     with schema_context(schema_name):
         payment = get_object_or_404(PaymentTransaction.objects.select_related('student'), id=receipt_id)
         fee_records = list(payment.fee_records.all())
-        item_breakdown = []
-        remarks = payment.remarks or ''
-        import re
-
-        marker_match = re.search(r'items sold\s*:\s*(.*)', remarks, flags=re.IGNORECASE)
-        if not marker_match:
-            marker_match = re.search(r'items sold\s+(.*)', remarks, flags=re.IGNORECASE)
-
-        if marker_match:
-            raw = marker_match.group(1)
-            for chunk in raw.split(';'):
-                chunk = chunk.strip().strip('.').strip()
-                if chunk:
-                    item_breakdown.append(chunk)
+        item_details = _extract_item_sales_from_remarks(payment.remarks or '')
+        
+        # ---- IMPROVED: total pending fee before payment = sum of amounts of linked fee records ----
+        total_pending_before = sum(fr.amount for fr in fee_records)
+        total_items_cost = sum(item['line_total'] for item in item_details) if item_details else Decimal('0')
+        total_paid = payment.amount
+        # Remaining after this payment = total_pending_before + total_items_cost - total_paid
+        remaining = (total_pending_before + total_items_cost) - total_paid
+        if remaining < 0:
+            remaining = Decimal('0')
+        
         context = {
             'tenant': tenant,
             'payment': payment,
             'fee_records': fee_records,
-            'item_breakdown': item_breakdown,
+            'item_details': item_details,
+            'has_fee': bool(fee_records),
+            'has_items': bool(item_details),
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+            # summary
+            'total_fee_paid': total_pending_before,  # this is the fee amount covered by this payment
+            'total_items_cost': total_items_cost,
+            'total_paid': total_paid,
+            'total_pending_before': total_pending_before,
+            'remaining': remaining,
+            'payment_mode_display': payment.get_payment_mode_display(),
+            'payment_type_display': payment.payment_type,
         }
     return render(request, 'tenant/receipt.html', context)
-@require_tenant_type(['school'])
 def defaulters(request, schema_name):
     tenant = get_tenant(request, schema_name)
     days = request.GET.get('days', '0')
@@ -1536,11 +1542,9 @@ def gym_receipt(request, schema_name, receipt_id):
             'payment': payment,
             'subscriptions': subscriptions,
             'logo_url': get_tenant(request, schema_name).school_logo.url if get_tenant(request, schema_name).school_logo else None,
+            'payment_type_display': payment.payment_type,   # added to fix missing method
         }
         return render(request, 'tenant/gym_receipt.html', context)
-
-
-@require_tenant_type(['gym'])
 def gym_reports(request, schema_name):
     """Gym reports and analytics page."""
     from django.shortcuts import render
