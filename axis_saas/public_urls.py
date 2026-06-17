@@ -4,6 +4,8 @@ from django.conf import settings as django_settings
 from django.conf.urls.static import static
 from django.http import HttpResponse, Http404, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import Http404
+from django_tenants.utils import schema_context
 
 from .models import SchoolClient
 
@@ -17,21 +19,12 @@ def saas_homepage(request):
     ''')
 
 def ensure_schoolclient(schema_name):
-    """Helper to ensure a SchoolClient row exists for the given schema name."""
-    try:
-        tenant = SchoolClient.objects.get(schema_name=schema_name)
-        return tenant
-    except SchoolClient.DoesNotExist:
-        # Check if the actual PostgreSQL schema exists
-        from django_tenants.utils import schema_context
-        from django.db import connection
-        schema_exists = False
+    """Fetch tenant from public schema; raise 404 if not found."""
+    with schema_context('public'):
         try:
-            connection.set_schema(schema_name)
-            schema_exists = True
-            connection.set_schema_to_public()
-        except Exception:
-            schema_exists = False
+            return SchoolClient.objects.get(schema_name=schema_name)
+        except SchoolClient.DoesNotExist:
+            raise Http404(f"Tenant '{schema_name}' does not exist.")
 
         if schema_exists:
             # Create the missing SchoolClient row
