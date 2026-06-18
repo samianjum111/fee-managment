@@ -526,7 +526,7 @@
                 {% endif %}
             
                 <!-- PWA Install Button (inside nav list) -->
-                <button id="installAppSidebarBtn" class="nav-item" style="display: none; width: 100%; background: none; border: none; text-align: left; cursor: pointer;">
+                <button id="installAppSidebarBtn" class="nav-item" style="display: flex; width: 100%; background: none; border: none; text-align: left; cursor: pointer;">
                     <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v12m-4-4l4 4 4-4"/>
                     </svg>
@@ -750,12 +750,7 @@ if ('serviceWorker' in navigator) {
 </script>
 
     <!-- Custom Install Button (PWA) -->
-    <div id="pwaInstallContainer" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: none;">
-        <button id="installAppBtn" style="background: var(--primary); color: white; border: none; border-radius: 2rem; padding: 0.6rem 1.2rem; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.2); cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v12m-4-4l4 4 4-4"/></svg>
-            Install App
-        </button>
-    </div>
+    
     <script>
         let deferredPrompt;
         const installContainer = document.getElementById('pwaInstallContainer');
@@ -773,6 +768,7 @@ if ('serviceWorker' in navigator) {
 
 
         // Sidebar install button
+        
         const sidebarInstallBtn = document.getElementById('installAppSidebarBtn');
         if (sidebarInstallBtn) {
             sidebarInstallBtn.addEventListener('click', async () => {
@@ -781,14 +777,18 @@ if ('serviceWorker' in navigator) {
                     const result = await deferredPrompt.userChoice;
                     if (result.outcome === 'accepted') {
                         console.log('User accepted the install prompt (sidebar)');
-                        installContainer.style.display = 'none';
                         sidebarInstallBtn.style.display = 'none';
                     } else {
                         console.log('User dismissed the install prompt (sidebar)');
                     }
                     deferredPrompt = null;
+                } else {
+                    // Show fallback modal with instructions
+                    document.getElementById('installFallbackModal').style.display = 'flex';
                 }
             });
+        }
+
         }
 
                 const result = await deferredPrompt.userChoice;
@@ -808,5 +808,55 @@ if ('serviceWorker' in navigator) {
         });
     </script>
     
+
+<!-- Fallback Install Modal (shown if native prompt not available) -->
+<div id="installFallbackModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background: var(--surface); border-radius: 1rem; padding: 1.5rem; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+        <h3 style="margin-top:0;">Install App</h3>
+        <p>To install this app on your device:</p>
+        <ul style="padding-left:1.5rem; margin:0.5rem 0;">
+            <li><strong>Chrome / Edge:</strong> Click the <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v12m-4-4l4 4 4-4"/></svg> icon in the address bar.</li>
+            <li><strong>Firefox:</strong> Tap the menu (☰) → "Add to Home screen".</li>
+            <li><strong>Safari (iOS):</strong> Tap the share button → "Add to Home Screen".</li>
+        </ul>
+        <button id="closeFallbackModal" style="background: var(--primary); color: white; border: none; border-radius: 2rem; padding: 0.5rem 1.2rem; font-weight: 600; cursor: pointer; margin-top: 0.5rem;">Got it</button>
+    </div>
+</div>
+<script>
+    document.getElementById('closeFallbackModal')?.addEventListener('click', function() {
+        document.getElementById('installFallbackModal').style.display = 'none';
+    });
+    // Close on overlay click
+    document.getElementById('installFallbackModal')?.addEventListener('click', function(e) {
+        if (e.target === this) this.style.display = 'none';
+    });
+</script>
+
+
+<script>
+    // Ensure sidebar install button works with fallback
+    (function() {
+        const sidebarBtn = document.getElementById('installAppSidebarBtn');
+        if (sidebarBtn) {
+            // Remove any existing listeners to avoid duplicates
+            sidebarBtn.replaceWith(sidebarBtn.cloneNode(true));
+            const newBtn = document.getElementById('installAppSidebarBtn');
+            newBtn.addEventListener('click', async () => {
+                if (typeof deferredPrompt !== 'undefined' && deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const result = await deferredPrompt.userChoice;
+                    if (result.outcome === 'accepted') {
+                        console.log('Accepted');
+                        newBtn.style.display = 'none';
+                    }
+                    deferredPrompt = null;
+                } else {
+                    document.getElementById('installFallbackModal').style.display = 'flex';
+                }
+            });
+        }
+    })();
+</script>
+
 </body>
 </html>

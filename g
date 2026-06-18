@@ -1,98 +1,205 @@
 #!/usr/bin/env python3
 """
-AXIS PWA Sidebar Nav Patcher – moves Install App button to the sidebar navigation list.
-Run once from the project root.
+PWA Patcher for AXIS School System
+- Creates PWA icons (192x192, 512x512) in axis_saas/static/pwa/
+- Modifies base.html to show sidebar install button always + fallback modal
+- Removes floating install button
 """
 
+import os
 import re
+import sys
 from pathlib import Path
 
-BASE_HTML = Path("templates/tenant/base.html")
+# Try to import PIL for icon generation
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    print("❌ Pillow not installed. Please install: pip install Pillow")
+    sys.exit(1)
 
-if not BASE_HTML.exists():
-    print("❌ templates/tenant/base.html not found. Are you in the project root?")
-    exit(1)
-
-with open(BASE_HTML, "r") as f:
-    content = f.read()
-
-# ----------------------------------------------------------------------
-# 1. Remove the existing sidebar install button (if it was in sidebar-footer)
-# ----------------------------------------------------------------------
-# The button is identified by id="installAppSidebarBtn".
-# We'll remove the whole button element from wherever it is.
-# We'll search for: <button id="installAppSidebarBtn" ...> ... </button>
-pattern = r'<button id="installAppSidebarBtn".*?</button>'
-content = re.sub(pattern, '', content, flags=re.DOTALL)
-print("✅ Removed old sidebar install button.")
-
-# ----------------------------------------------------------------------
-# 2. Insert the new install button inside sidebar-nav (after all nav items)
-# ----------------------------------------------------------------------
-# We want to insert it after the last nav-item (which might be Fee Structure or Settings).
-# We'll find the closing </nav> tag and insert before it.
-new_button_html = '''
-                <!-- PWA Install Button (inside nav list) -->
-                <button id="installAppSidebarBtn" class="nav-item" style="display: none; width: 100%; background: none; border: none; text-align: left; cursor: pointer;">
-                    <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v12m-4-4l4 4 4-4"/>
-                    </svg>
-                    <span>Install App</span>
-                </button>
-'''
-
-# Find the closing </nav> tag inside sidebar-nav
-nav_end = content.find('</nav>', content.find('class="sidebar-nav"'))
-if nav_end != -1:
-    content = content[:nav_end] + new_button_html + content[nav_end:]
-    print("✅ Inserted new install button into sidebar-nav.")
-else:
-    print("⚠️ Could not find </nav> inside sidebar. Trying fallback...")
-    # Fallback: insert before the sidebar-footer div
-    footer_start = content.find('class="sidebar-footer"')
-    if footer_start != -1:
-        content = content[:footer_start] + new_button_html + content[footer_start:]
-        print("✅ Inserted button before sidebar-footer.")
-    else:
-        print("❌ Could not insert button. Manual intervention required.")
-
-# ----------------------------------------------------------------------
-# 3. Ensure the button is hidden in standalone mode (already present)
-# ----------------------------------------------------------------------
-# The existing CSS has a rule:
-# @media all and (display-mode: standalone) { ... #installAppSidebarBtn { display: none !important; } }
-# We'll check if it's present; if not, add it.
-if "#installAppSidebarBtn" not in content:
-    hide_standalone = """
-@media all and (display-mode: standalone) {
-    #pwaInstallContainer { display: none !important; }
-    #installAppSidebarBtn { display: none !important; }
+# ---------- CONFIG ----------
+BASE_HTML = "templates/tenant/base.html"
+STATIC_DIR = "axis_saas/static/pwa"
+ICONS = {
+    "icon-192x192.png": (192, 192),
+    "icon-512x512.png": (512, 512),
 }
-"""
-    # Insert before </style> or </head>
-    if "</style>" in content:
-        content = content.replace("</style>", hide_standalone + "\n</style>")
+
+
+def create_icon(filename, size):
+    """Generate a simple icon with text 'AXIS'."""
+    img = Image.new("RGB", size, color="#3b82f6")
+    draw = ImageDraw.Draw(img)
+    # Try to load a font, fallback to default
+    try:
+        font = ImageFont.truetype("arial.ttf", size // 4)
+    except:
+        font = ImageFont.load_default()
+    text = "AXIS"
+    # Get text bbox
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    pos = ((size[0] - tw) // 2, (size[1] - th) // 2)
+    draw.text(pos, text, fill="white", font=font)
+    img.save(filename)
+    print(f"✅ Created {filename}")
+
+
+def generate_icons():
+    """Create all icons if they don't exist."""
+    os.makedirs(STATIC_DIR, exist_ok=True)
+    for name, size in ICONS.items():
+        path = os.path.join(STATIC_DIR, name)
+        if not os.path.exists(path):
+            create_icon(path, size)
+        else:
+            print(f"⏩ Icon already exists: {path}")
+
+
+def patch_base_html():
+    """Modify base.html: remove floating button, show sidebar button, add fallback modal."""
+    if not os.path.exists(BASE_HTML):
+        print(f"❌ {BASE_HTML} not found!")
+        return
+
+    with open(BASE_HTML, "r") as f:
+        content = f.read()
+
+    # ----- 1. Remove floating install container -----
+    # Find and remove the floating container completely
+    floating_pattern = r'<div id="pwaInstallContainer".*?</div>'
+    content = re.sub(floating_pattern, "", content, flags=re.DOTALL)
+    print("✅ Removed floating install button")
+
+    # ----- 2. Make sidebar install button always visible -----
+    # Replace style="display: none;" with style="display: flex;" (or remove inline style)
+    sidebar_btn_pattern = r'(<button id="installAppSidebarBtn".*?)style="display: none;"(.*?>)'
+    # If not found, try to add style if missing
+    if re.search(sidebar_btn_pattern, content):
+        content = re.sub(sidebar_btn_pattern, r'\1style="display: flex;"\2', content)
+        print("✅ Sidebar button set to visible")
     else:
-        content = content.replace("</head>", f"<style>{hide_standalone}</style></head>")
-    print("✅ Added standalone hiding for sidebar button.")
-else:
-    print("ℹ️ Standalone hiding already present.")
+        # If style not present, add it
+        sidebar_btn = '<button id="installAppSidebarBtn" class="nav-item" style="display: flex; width: 100%; background: none; border: none; text-align: left; cursor: pointer;">'
+        content = re.sub(r'<button id="installAppSidebarBtn".*?>', sidebar_btn, content)
+        print("✅ Sidebar button style added")
 
-# ----------------------------------------------------------------------
-# 4. Ensure JavaScript for sidebar button exists (already present)
-# ----------------------------------------------------------------------
-# The existing JS has the sidebarInstallBtn click listener. We'll keep it.
+    # ----- 3. Add fallback modal HTML (right before the floating container's old position or at end of body) -----
+    fallback_modal = '''
+<!-- Fallback Install Modal (shown if native prompt not available) -->
+<div id="installFallbackModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background: var(--surface); border-radius: 1rem; padding: 1.5rem; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+        <h3 style="margin-top:0;">Install App</h3>
+        <p>To install this app on your device:</p>
+        <ul style="padding-left:1.5rem; margin:0.5rem 0;">
+            <li><strong>Chrome / Edge:</strong> Click the <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v12m-4-4l4 4 4-4"/></svg> icon in the address bar.</li>
+            <li><strong>Firefox:</strong> Tap the menu (☰) → "Add to Home screen".</li>
+            <li><strong>Safari (iOS):</strong> Tap the share button → "Add to Home Screen".</li>
+        </ul>
+        <button id="closeFallbackModal" style="background: var(--primary); color: white; border: none; border-radius: 2rem; padding: 0.5rem 1.2rem; font-weight: 600; cursor: pointer; margin-top: 0.5rem;">Got it</button>
+    </div>
+</div>
+<script>
+    document.getElementById('closeFallbackModal')?.addEventListener('click', function() {
+        document.getElementById('installFallbackModal').style.display = 'none';
+    });
+    // Close on overlay click
+    document.getElementById('installFallbackModal')?.addEventListener('click', function(e) {
+        if (e.target === this) this.style.display = 'none';
+    });
+</script>
+'''
+    # Insert before </body> or at the end
+    if '</body>' in content:
+        content = content.replace('</body>', fallback_modal + '\n</body>')
+        print("✅ Fallback modal added")
+    else:
+        # fallback: append to end
+        content += fallback_modal
+        print("✅ Fallback modal appended (no </body> found)")
 
-# ----------------------------------------------------------------------
-# 5. Write the updated base.html
-# ----------------------------------------------------------------------
-with open(BASE_HTML, "w") as f:
-    f.write(content)
+    # ----- 4. Update JavaScript to handle fallback -----
+    # Find the install button click handler and modify
+    # We'll add a check: if deferredPrompt exists, use it; else show fallback modal.
+    # We'll also ensure the sidebar button click event is attached.
+    # Since we have existing script, we can replace the sidebar button click handler with improved version.
+    # Search for the block that attaches click listener to installAppSidebarBtn and replace with new code.
+    old_sidebar_handler = r'''const sidebarInstallBtn = document\.getElementById\('installAppSidebarBtn'\);\s*if \(sidebarInstallBtn\) \{\s*sidebarInstallBtn\.addEventListener\('click', async \(\) => \{.*?\}\s*\}\);'''
+    new_sidebar_handler = '''
+        const sidebarInstallBtn = document.getElementById('installAppSidebarBtn');
+        if (sidebarInstallBtn) {
+            sidebarInstallBtn.addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const result = await deferredPrompt.userChoice;
+                    if (result.outcome === 'accepted') {
+                        console.log('User accepted the install prompt (sidebar)');
+                        sidebarInstallBtn.style.display = 'none';
+                    } else {
+                        console.log('User dismissed the install prompt (sidebar)');
+                    }
+                    deferredPrompt = null;
+                } else {
+                    // Show fallback modal with instructions
+                    document.getElementById('installFallbackModal').style.display = 'flex';
+                }
+            });
+        }
+'''
+    # Use regex to replace the block (non-greedy)
+    content = re.sub(old_sidebar_handler, new_sidebar_handler, content, flags=re.DOTALL)
+    if old_sidebar_handler not in content:
+        # If pattern not found, just append the new handler after the existing script (but we can also add it unconditionally)
+        # Let's just add a new script block that ensures the handler is attached.
+        extra_js = '''
+<script>
+    // Ensure sidebar install button works with fallback
+    (function() {
+        const sidebarBtn = document.getElementById('installAppSidebarBtn');
+        if (sidebarBtn) {
+            // Remove any existing listeners to avoid duplicates
+            sidebarBtn.replaceWith(sidebarBtn.cloneNode(true));
+            const newBtn = document.getElementById('installAppSidebarBtn');
+            newBtn.addEventListener('click', async () => {
+                if (typeof deferredPrompt !== 'undefined' && deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const result = await deferredPrompt.userChoice;
+                    if (result.outcome === 'accepted') {
+                        console.log('Accepted');
+                        newBtn.style.display = 'none';
+                    }
+                    deferredPrompt = null;
+                } else {
+                    document.getElementById('installFallbackModal').style.display = 'flex';
+                }
+            });
+        }
+    })();
+</script>
+'''
+        # Insert before </body>
+        content = content.replace('</body>', extra_js + '\n</body>')
+        print("✅ Added extra JS to handle fallback")
+    else:
+        print("✅ Updated sidebar install click handler")
 
-print("\n✅ PWA Sidebar Navigation Patcher complete!")
-print("\nNext steps:")
-print("1. Restart your Django server (python manage.py runserver).")
-print("2. Log in to any tenant portal.")
-print("3. The 'Install App' button should now appear in the sidebar, right below the last navigation item.")
-print("4. On desktop, if the browser supports PWA, the button will be visible; clicking it triggers the install prompt.")
-print("5. Once installed, the button is automatically hidden in standalone mode.")
+    # ----- 5. Ensure the existing CSS hides the button in standalone mode (already present) -----
+    # We already have: @media all and (display-mode: standalone) { #installAppSidebarBtn { display: none !important; } }
+    # That's fine.
+
+    # Write back
+    with open(BASE_HTML, "w") as f:
+        f.write(content)
+
+    print("✅ base.html patched successfully.")
+
+
+if __name__ == "__main__":
+    print("🚀 AXIS PWA Patcher starting...")
+    generate_icons()
+    patch_base_html()
+    print("\n🎯 Done! Now run:")
+    print("   python manage.py collectstatic")
+    print("   python manage.py runserver")
+    print("\nThen visit your site on mobile and laptop – the install button will appear in the sidebar (unless already installed).")
