@@ -1,90 +1,48 @@
 #!/usr/bin/env python3
 """
-AXIS Template Feature Patcher
-- Adds a custom template filter 'has_feature' to fee_extras.py
-- Replaces all occurrences of tenant.is_feature_enabled('...') with tenant|has_feature:'...'
-- Scans all templates for similar patterns
-Run: python3 fix_template_features.py
+mobile_nav_patcher.py
+Fixes the bottom nav "Collect" link to use mobile_fee_collection instead of fee_collection.
+Run: python3 mobile_nav_patcher.py
 """
 
-import os
 import re
-import glob
+from pathlib import Path
 
-def main():
-    # 1. Add filter to fee_extras.py
-    extras_path = "axis_saas/templatetags/fee_extras.py"
-    if os.path.exists(extras_path):
-        with open(extras_path, "r") as f:
-            content = f.read()
-        if "def has_feature" not in content:
-            # Add new filter after existing ones
-            new_filter = """
-@register.filter
-def has_feature(tenant, feature_name):
-    \"\"\"Return True if tenant has the given feature enabled.\"\"\"
-    return tenant.is_feature_enabled(feature_name)
-"""
-            # Insert before the last line or at the end
-            content = content.rstrip() + new_filter + "\n"
-            with open(extras_path, "w") as f:
-                f.write(content)
-            print("✅ Added 'has_feature' filter to fee_extras.py")
-        else:
-            print("ℹ️ 'has_feature' filter already exists.")
-    else:
-        print("❌ fee_extras.py not found! Skipping.")
+BASE_DIR = Path(__file__).parent
+MOBILE_BASE = BASE_DIR / "templates" / "mobile" / "base.html"
 
-    # 2. Fix templates: base.html and any other tenant templates
-    template_dir = "templates/tenant"
-    if not os.path.exists(template_dir):
-        print("❌ Templates directory not found!")
+def patch_mobile_base():
+    if not MOBILE_BASE.exists():
+        print(f"❌ File not found: {MOBILE_BASE}")
         return
 
-    # Find all .html files in tenant templates
-    html_files = glob.glob(os.path.join(template_dir, "*.html"))
-    for file_path in html_files:
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
+    with open(MOBILE_BASE, "r") as f:
+        content = f.read()
 
-        # Check if the file uses the problematic pattern
-        if "tenant.is_feature_enabled(" in content:
-            # Replace pattern: tenant.is_feature_enabled('...') -> tenant|has_feature:'...'
-            # Also handle double quotes
-            new_content = re.sub(
-                r'tenant\.is_feature_enabled\(\s*[\'"]([^\'"]+)[\'"]\s*\)',
-                r"tenant|has_feature:'\1'",
-                content
-            )
-            # Also ensure the load tag is present
-            if "{% load fee_extras %}" not in new_content:
-                # Insert it after the extends tag or at the top
-                lines = new_content.splitlines()
-                if lines and lines[0].startswith("{% extends"):
-                    # Insert after the extends line
-                    lines.insert(1, "{% load fee_extras %}")
-                else:
-                    # Insert at the beginning
-                    lines.insert(0, "{% load fee_extras %}")
-                new_content = "\n".join(lines)
+    # Look for the bottom nav "Collect" link
+    # We'll replace the url tag with the mobile version
+    old_href = r"{% url 'fee_collection' schema_name=tenant.schema_name %}"
+    new_href = "{% url 'mobile_fee_collection' schema_name=tenant.schema_name %}"
 
-            if new_content != content:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(new_content)
-                print(f"✅ Fixed {file_path}")
-            else:
-                print(f"ℹ️ No changes needed in {file_path}")
+    if old_href not in content:
+        print("⚠️ Could not find the exact 'fee_collection' URL tag in mobile/base.html")
+        # Fallback: try to replace the whole <a> tag using regex
+        pattern = r'<a href="{% url \'fee_collection\' schema_name=tenant\.schema_name %}" class="nav-item {% if \'fee_collection\' in request\.resolver_match\.url_name %}active{% endif %}>'
+        if re.search(pattern, content):
+            new_tag = '<a href="{% url \'mobile_fee_collection\' schema_name=tenant.schema_name %}" class="nav-item {% if \'fee_collection\' in request.resolver_match.url_name %}active{% endif %}>'
+            content = re.sub(pattern, new_tag, content)
+            print("✅ Patched using regex fallback")
         else:
-            # Still ensure load tag exists if any filter is used
-            # Not strictly necessary, but good practice
-            pass
+            print("❌ Could not find any matching pattern. Please update manually.")
+            return
+    else:
+        content = content.replace(old_href, new_href)
+        print("✅ Replaced fee_collection with mobile_fee_collection in bottom nav")
 
-    # 3. Also fix any other templates (like base.html is in templates/tenant)
-    # Already covered.
+    with open(MOBILE_BASE, "w") as f:
+        f.write(content)
 
-    print("\n🎯 Patcher finished. Restart the server:")
-    print("   python manage.py runserver")
-    print("   Then visit a school portal – the sidebar should work.")
+    print("✅ Mobile base template updated. Restart server to apply changes.")
 
 if __name__ == "__main__":
-    main()
+    patch_mobile_base()
