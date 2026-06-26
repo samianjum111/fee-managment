@@ -361,7 +361,8 @@ def fee_receipt(request, schema_name, receipt_id):
             'payment_mode_display': payment.get_payment_mode_display(),
             'payment_type_display': payment.payment_type,
         }
-    return render(request, 'tenant/receipt.html', context)
+    template = 'mobile/receipt.html' if is_mobile_user_agent(request) else 'tenant/receipt.html'
+    return render(request, template, context)
 
 @require_tenant_type(['school'])
 @require_school_feature('defaulters')
@@ -615,6 +616,7 @@ def reports(request, schema_name):
 @require_school_feature('fee_collection')
 def fee_collection(request, schema_name, student_id=None):
     tenant = get_tenant(request, schema_name)
+    mobile_mode = is_mobile_user_agent(request)
     with schema_context(schema_name):
         # Handle POST payment (works for both list and student views)
         if request.method == 'POST':
@@ -745,7 +747,8 @@ def fee_collection(request, schema_name, student_id=None):
                     'categories': categories,
                     'logo_url': tenant.school_logo.url if tenant.school_logo else None,
                 }
-                return render(request, 'tenant/collect_fee.html', context)
+                template_name = 'mobile/collect_fee.html' if mobile_mode else 'tenant/collect_fee.html'
+                return render(request, template_name, context)
             except Student.DoesNotExist:
                 messages.error(request, "Student not found")
                 return redirect('fee_collection', schema_name=schema_name)
@@ -780,6 +783,8 @@ def fee_collection(request, schema_name, student_id=None):
 
         total_pending_all = sum(fr.remaining for fr in FeeRecord.objects.filter(status__in=['pending', 'partial', 'overdue']))
         total_payments_count = PaymentTransaction.objects.count()
+        today = date.today()
+        today_collection = PaymentTransaction.objects.filter(payment_date=today).aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
         recent_payments = list(PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:5])
         grades = list(Student.objects.values_list('grade', flat=True).distinct().order_by('grade'))
         sections = list(Student.objects.values_list('section', flat=True).distinct().order_by('section'))
@@ -792,6 +797,7 @@ def fee_collection(request, schema_name, student_id=None):
             'recent_payments': recent_payments,
             'total_pending_all': total_pending_all,
             'total_payments_count': total_payments_count,
+            'today_collection': today_collection,
             'grades': grades,
             'sections': sections,
             'products': products,
@@ -801,7 +807,8 @@ def fee_collection(request, schema_name, student_id=None):
             'section_filter': section_filter,
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-        return render(request, 'tenant/fee_collection.html', context)
+        template_name = 'mobile/fee_collection.html' if mobile_mode else 'tenant/fee_collection.html'
+        return render(request, template_name, context)
 @csrf_exempt
 @require_http_methods(["GET"])
 def debug_payments_api(request):

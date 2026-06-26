@@ -1,0 +1,317 @@
+{% extends 'mobile/base.html' %}
+{% load fee_extras %}
+{% block title %}Fee Collection | {{ tenant.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .hero-panel {
+    background: linear-gradient(180deg, rgba(91,74,224,0.95), rgba(79,70,229,0.92));
+    color: white;
+    border-radius: 1.75rem;
+    padding: 1.4rem 1.25rem;
+    box-shadow: 0 24px 50px rgba(15,23,42,0.14);
+    margin-bottom: 1rem;
+  }
+  .hero-panel h1 {
+    font-size: 1.35rem;
+    margin-bottom: 0.35rem;
+  }
+  .hero-panel p {
+    color: rgba(255,255,255,0.92);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  .hero-stat {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin-top: 1rem;
+  }
+  .hero-stat .stat-pill {
+    padding: 0.95rem 1rem;
+    border-radius: 1.25rem;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.18);
+    font-size: 0.84rem;
+  }
+  .hero-stat .stat-pill strong {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 1.1rem;
+  }
+  .search-panel {
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .search-row {
+    display: flex;
+    gap: 0.65rem;
+    align-items: center;
+  }
+  .search-row input,
+  .search-row select,
+  .search-row button {
+    width: 100%;
+    border-radius: 1rem;
+    border: 1px solid rgba(148,163,184,0.2);
+    padding: 0.9rem 1rem;
+    font-size: 0.95rem;
+    background: var(--surface);
+  }
+  .search-row button {
+    background: var(--accent);
+    border-color: transparent;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .summary-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(100px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .summary-card {
+    background: white;
+    border-radius: 1.25rem;
+    padding: 1rem;
+    box-shadow: 0 16px 35px rgba(15,23,42,0.06);
+    border: 1px solid rgba(148,163,184,0.14);
+  }
+  .summary-card .label {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    margin-bottom: 0.45rem;
+  }
+  .summary-card .value {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .pending-list {
+    display: grid;
+    gap: 0.9rem;
+    margin-bottom: 1rem;
+  }
+  .pending-card {
+    background: white;
+    border-radius: 1.5rem;
+    padding: 1rem;
+    box-shadow: 0 18px 35px rgba(15,23,42,0.06);
+    border: 1px solid rgba(148,163,184,0.14);
+    text-decoration: none;
+    color: inherit;
+  }
+  .pending-card:hover {
+    transform: translateY(-1px);
+  }
+  .pending-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    align-items: flex-start;
+    margin-bottom: 0.85rem;
+  }
+  .pending-title {
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+  }
+  .pending-meta {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+  .badge-pill {
+    display: inline-flex;
+    border-radius: 999px;
+    background: rgba(91,74,224,0.08);
+    color: #5B4AE0;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .pending-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 0.75rem;
+  }
+  .pending-chip {
+    background: rgba(15,23,42,0.04);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.78rem;
+  }
+  .history-section {
+    margin-bottom: 1rem;
+  }
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.9rem;
+  }
+  .history-header h2 {
+    font-size: 1rem;
+  }
+  .history-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 0.86rem;
+  }
+  .history-card {
+    background: white;
+    border-radius: 1.35rem;
+    padding: 0.9rem;
+    box-shadow: 0 16px 35px rgba(15,23,42,0.06);
+    border: 1px solid rgba(148,163,184,0.14);
+  }
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.65rem;
+    padding: 0.85rem 0;
+    border-bottom: 1px solid rgba(148,163,184,0.14);
+    align-items: center;
+  }
+  .history-item:last-child {
+    border-bottom: none;
+  }
+  .history-item strong {
+    font-size: 1rem;
+  }
+  .empty-state {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 1.25rem 0;
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="hero-panel">
+  <h1>Fee Collection</h1>
+  <p>Fast fee operations for mobile. Use this screen to pick students, collect payments and review today’s cash flow.</p>
+  <div class="hero-stat">
+    <div class="stat-pill">
+      Collection<br><strong>₹{{ today_collection|default:0|floatformat:2 }}</strong>
+    </div>
+    <div class="stat-pill">
+      Pending<br><strong>₹{{ total_pending_all|default:0|floatformat:2 }}</strong>
+    </div>
+    <div class="stat-pill">
+      Payments<br><strong>{{ total_payments_count }}</strong>
+    </div>
+  </div>
+</div>
+
+<form method="get" class="search-panel">
+  <div class="search-row">
+    <input type="search" name="pending_search" placeholder="Search name, roll or father" value="{{ search_filter }}">
+  </div>
+  <div class="search-row">
+    <select name="pending_grade">
+      <option value="">All grades</option>
+      {% for g in grades %}
+      <option value="{{ g }}" {% if grade_filter == g %}selected{% endif %}>{{ g }}</option>
+      {% endfor %}
+    </select>
+    <select name="pending_section">
+      <option value="">All sections</option>
+      {% for s in sections %}
+      <option value="{{ s }}" {% if section_filter == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="search-row">
+    <button type="submit">Apply filters</button>
+  </div>
+</form>
+
+{% if pending_students %}
+<div class="pending-list">
+  {% for student in pending_students %}
+  <a href="{% url 'fee_collection' schema_name=tenant.schema_name student_id=student.id %}" class="pending-card">
+    <div class="pending-row">
+      <div>
+        <div class="pending-title">{{ student.name }}</div>
+        <div class="pending-meta">{{ student.grade }} • {{ student.section }} • Roll {{ student.roll_number }}</div>
+      </div>
+      <span class="badge-pill">₹{{ student.pending_total|floatformat:2 }}</span>
+    </div>
+    <div class="pending-summary">
+      <span class="pending-chip">Father: {{ student.father_name }}</span>
+      <span class="pending-chip">{{ student.father_cnic|default:'No CNIC' }}</span>
+      <span class="pending-chip">Mobile: {{ student.parent_mobile|default:'N/A' }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+<div class="pagination">
+  {% if pending_students.has_previous %}
+  <a href="?page=1{% if search_filter %}&pending_search={{ search_filter }}{% endif %}{% if grade_filter %}&pending_grade={{ grade_filter }}{% endif %}{% if section_filter %}&pending_section={{ section_filter }}{% endif %}">&laquo; First</a>
+  <a href="?page={{ pending_students.previous_page_number }}{% if search_filter %}&pending_search={{ search_filter }}{% endif %}{% if grade_filter %}&pending_grade={{ grade_filter }}{% endif %}{% if section_filter %}&pending_section={{ section_filter }}{% endif %}">Previous</a>
+  {% endif %}
+  <span class="current">Page {{ pending_students.number }} of {{ pending_students.paginator.num_pages }}</span>
+  {% if pending_students.has_next %}
+  <a href="?page={{ pending_students.next_page_number }}{% if search_filter %}&pending_search={{ search_filter }}{% endif %}{% if grade_filter %}&pending_grade={{ grade_filter }}{% endif %}{% if section_filter %}&pending_section={{ section_filter }}{% endif %}">Next</a>
+  <a href="?page={{ pending_students.paginator.num_pages }}{% if search_filter %}&pending_search={{ search_filter }}{% endif %}{% if grade_filter %}&pending_grade={{ grade_filter }}{% endif %}{% if section_filter %}&pending_section={{ section_filter }}{% endif %}">Last</a>
+  {% endif %}
+</div>
+
+<div class="history-section">
+  <div class="history-header">
+    <h2>Recent payments</h2>
+    <a href="{% url 'reports' schema_name=tenant.schema_name %}?type=collection&quick_filter=all" class="history-link">See all</a>
+  </div>
+  <div class="history-card">
+    {% for payment in recent_payments %}
+    <div class="history-item">
+      <div>
+        <strong>{{ payment.student.name }}</strong>
+        <div class="pending-meta">{{ payment.receipt_number }} • {{ payment.payment_date|date:'d MMM' }}</div>
+      </div>
+      <div style="font-weight:700;color:var(--accent);">₹{{ payment.amount|floatformat:2 }}</div>
+    </div>
+    {% empty %}
+    <div class="empty-state">No recent payments yet. Collect the first fee from any student card above.</div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="history-section">
+  <div class="history-header">
+    <h2>Quick actions</h2>
+    <span class="history-link">Premium</span>
+  </div>
+  <div class="history-card">
+    <div class="history-item">
+      <div>
+        <strong>Generate all fees</strong>
+        <div class="pending-meta">Create fee records for the current period for all students.</div>
+      </div>
+      <a href="{% url 'fee_collection' schema_name=tenant.schema_name %}" class="history-link">Go</a>
+    </div>
+    <div class="history-item">
+      <div>
+        <strong>View full student list</strong>
+        <div class="pending-meta">Open student directory and choose from any class.</div>
+      </div>
+      <a href="{% url 'mobile_student_list' schema_name=tenant.schema_name %}" class="history-link">Open</a>
+    </div>
+  </div>
+</div>
+
+<div class="empty-state">End of list.</div>
+
+{% else %}
+<div class="empty-state">
+  <p>No students currently have pending fee balances.</p>
+  <p>Try opening the student directory or generate month fees to get started.</p>
+  <p><a href="{% url 'mobile_student_list' schema_name=tenant.schema_name %}" class="history-link">Student Directory</a></p>
+</div>
+{% endif %}
+{% endblock %}

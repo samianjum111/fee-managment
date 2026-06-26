@@ -1,0 +1,179 @@
+{% extends 'mobile/base.html' %}
+{% block title %}Receipt {{ payment.receipt_number }} | {{ tenant.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .receipt-panel {
+    background: white;
+    border-radius: 1.5rem;
+    padding: 1.2rem;
+    border: 1px solid rgba(148,163,184,0.16);
+    box-shadow: 0 18px 35px rgba(15,23,42,0.08);
+  }
+  .receipt-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .receipt-header h1 {
+    font-size: 1.15rem;
+    margin: 0;
+  }
+  .receipt-badge {
+    border-radius: 999px;
+    padding: 0.5rem 0.9rem;
+    font-weight: 700;
+    font-size: 0.78rem;
+    background: rgba(14,165,233,0.12);
+    color: #0f172a;
+  }
+  .receipt-meta,
+  .info-grid,
+  .summary-grid {
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .meta-row,
+  .summary-row,
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .meta-label,
+  .info-label {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+  }
+  .meta-value,
+  .info-value {
+    font-weight: 700;
+    color: var(--text-strong);
+  }
+  .item-table,
+  .summary-card {
+    background: rgba(241,245,249,0.9);
+    border-radius: 1.25rem;
+    padding: 0.95rem;
+  }
+  .item-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid rgba(148,163,184,0.14);
+  }
+  .item-row:last-child {
+    border-bottom: none;
+  }
+  .item-row strong {
+    font-size: 0.95rem;
+  }
+  .item-meta {
+    color: var(--text-muted);
+    font-size: 0.84rem;
+  }
+  .receipt-actions {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1.2rem;
+  }
+  .receipt-actions button,
+  .receipt-actions a {
+    width: 100%;
+    border-radius: 1.1rem;
+    padding: 0.95rem 1rem;
+    font-weight: 700;
+    border: none;
+    text-align: center;
+    text-decoration: none;
+  }
+  .btn-print {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-download {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid rgba(148,163,184,0.18);
+  }
+  .btn-back {
+    display: inline-block;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid rgba(148,163,184,0.18);
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="receipt-panel">
+  <div class="receipt-header">
+    <div>
+      <h1>Receipt #{{ payment.receipt_number }}</h1>
+      <div class="meta-row">
+        <span class="meta-label">Date</span>
+        <span class="meta-value">{{ payment.payment_date|date:'d MMM yyyy' }}</span>
+      </div>
+    </div>
+    <div class="receipt-badge">{{ payment_type_display|upper }}</div>
+  </div>
+
+  <div class="receipt-meta">
+    <div class="meta-row"><span class="meta-label">Mode</span><span class="meta-value">{{ payment_mode_display }}</span></div>
+    <div class="meta-row"><span class="meta-label">Student</span><span class="meta-value">{{ payment.student.name }}</span></div>
+    <div class="meta-row"><span class="meta-label">Roll</span><span class="meta-value">{{ payment.student.roll_number }}</span></div>
+    <div class="meta-row"><span class="meta-label">Class</span><span class="meta-value">{{ payment.student.grade }} - {{ payment.student.section }}</span></div>
+  </div>
+
+  {% if has_fee %}
+  <div class="item-table">
+    <div class="meta-row"><strong>Fee records</strong><span></span></div>
+    {% for fr in fee_records %}
+    <div class="item-row">
+      <div>
+        <strong>{{ fr.month }}/{{ fr.year }}</strong>
+        <div class="item-meta">Paid ₹{{ fr.paid_amount|floatformat:2 }} • Total ₹{{ fr.amount|floatformat:2 }}</div>
+      </div>
+      <div class="item-meta">{{ fr.get_status_display }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if has_items %}
+  <div class="item-table">
+    <div class="meta-row"><strong>Item sales</strong><span></span></div>
+    {% for item in item_details %}
+    <div class="item-row">
+      <div>
+        <strong>{{ item.name }}</strong>
+        <div class="item-meta">{{ item.quantity }} × ₹{{ item.unit_price|floatformat:2 }}</div>
+      </div>
+      <div class="item-meta">₹{{ item.line_total|floatformat:2 }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="summary-card">
+    <div class="summary-grid">
+      <div class="summary-row"><span class="meta-label">Fee total</span><span class="meta-value">₹{{ total_fee_paid|floatformat:2 }}</span></div>
+      {% if has_items %}
+      <div class="summary-row"><span class="meta-label">Items total</span><span class="meta-value">₹{{ total_items_cost|floatformat:2 }}</span></div>
+      {% endif %}
+      <div class="summary-row"><span class="meta-label">Paid</span><span class="meta-value">₹{{ total_paid|floatformat:2 }}</span></div>
+      <div class="summary-row"><span class="meta-label">Remaining</span><span class="meta-value">₹{{ remaining|floatformat:2 }}</span></div>
+    </div>
+  </div>
+
+  <div class="receipt-actions">
+    <button type="button" class="btn-print" onclick="window.print()">Print receipt</button>
+    <a href="{% url 'fee_collection' schema_name=tenant.schema_name %}" class="btn-back">Back to Collection</a>
+  </div>
+</div>
+{% endblock %}
