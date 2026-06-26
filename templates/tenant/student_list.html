@@ -287,4 +287,14 @@
     text-decoration: none;
 }
 </style>
+
+<script>
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+        const currentPath = window.location.pathname.replace(/\/+$|\?.*$/, '');
+        const mobilePath = "{% url 'mobile_student_list' schema_name=tenant.schema_name %}";
+        if (currentPath !== mobilePath) {
+            window.location.replace(mobilePath);
+        }
+    }
+</script>
 {% endblock %}

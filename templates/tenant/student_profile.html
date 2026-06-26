@@ -452,4 +452,14 @@ loadFeeRecords();
 loadPayments();
 </script>
 
+<script>
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+        const currentPath = window.location.pathname.replace(/\/+$|\?.*$/, '');
+        const mobilePath = "{% url 'mobile_student_profile' schema_name=tenant.schema_name student_id=student.id %}";
+        if (currentPath !== mobilePath) {
+            window.location.replace(mobilePath);
+        }
+    }
+</script>
+
 {% endblock %}

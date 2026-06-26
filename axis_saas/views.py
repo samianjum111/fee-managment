@@ -1,3 +1,4 @@
+import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, Http404
 from django.contrib import messages
@@ -11,6 +12,7 @@ from decimal import Decimal
 from datetime import date, timedelta, datetime
 from collections import defaultdict
 import json
+import re
 from functools import wraps
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
@@ -77,6 +79,12 @@ def get_tenant(request, schema_name):
     from django_tenants.utils import schema_context
     with schema_context('public'):
         return get_object_or_404(SchoolClient, schema_name=schema_name)
+
+MOBILE_AGENT_RE = re.compile(r"Mobile|Android|iP(hone|od|ad)|Opera Mini|IEMobile|BlackBerry|webOS|Fennec|Silk", re.I)
+
+def is_mobile_user_agent(request):
+    ua = request.META.get('HTTP_USER_AGENT', '')
+    return bool(MOBILE_AGENT_RE.search(ua))
 
 def get_dashboard_context(tenant, schema_name):
     with schema_context(schema_name):
@@ -203,6 +211,8 @@ def get_student_list_context(request, schema_name):
 @require_tenant_type(['school'])
 @require_school_feature('students')
 def student_list(request, schema_name):
+    if is_mobile_user_agent(request):
+        return redirect('mobile_student_list', schema_name=schema_name)
     context = get_student_list_context(request, schema_name)
     return render(request, 'tenant/student_list.html', context)
 
@@ -306,6 +316,8 @@ def get_student_profile_context(request, schema_name, student_id):
 @require_tenant_type(['school'])
 @require_school_feature('students')
 def student_profile(request, schema_name, student_id):
+    if is_mobile_user_agent(request):
+        return redirect('mobile_student_profile', schema_name=schema_name, student_id=student_id)
     context = get_student_profile_context(request, schema_name, student_id)
     return render(request, 'tenant/student_profile.html', context)
 
