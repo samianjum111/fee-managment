@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 """
-AXIS Ultra‑Premium Mobile Student List
-Replaces templates/mobile/student_list.html with a world‑class design.
-Run: python patch_ultra_premium_student_list.py
+AXIS Student List – Final Polish
+- Theme‑matching design (blue/glass)
+- Status‑specific card colors (active, suspended, graduated)
+- Pending amount red/green
+- Analytics strip clickable filters
+Run: python final_student_list_patcher.py
 """
 
-import os
+import re
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent
+VIEWS_PATH = PROJECT_ROOT / "axis_saas" / "views.py"
 TEMPLATE_PATH = PROJECT_ROOT / "templates" / "mobile" / "student_list.html"
 
+# --------------------------------------------------------------------
+# 1. CORRECTED TEMPLATE (theme‑matched, status colors, clickable analytics)
+# --------------------------------------------------------------------
 NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
 {% load fee_extras %}
 {% block title %}Students | {{ tenant.name }}{% endblock %}
@@ -18,27 +25,91 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
 {% block extra_head %}
 <style>
   /* ============================================================
-     ULTRA PREMIUM MOBILE STUDENT LIST – AXIS DESIGN SYSTEM
+     AXIS MOBILE THEME – STUDENT LIST (glass, blue, status colors)
      ============================================================ */
 
   :root {
-    --card-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
-    --card-radius: 1.5rem;
-    --glass-bg: rgba(255, 255, 255, 0.92);
-    --glass-border: rgba(255, 255, 255, 0.6);
+    --card-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    --card-radius: 1.25rem;
+    --glass-bg: rgba(255, 255, 255, 0.88);
+    --glass-border: rgba(255, 255, 255, 0.5);
     --gradient-start: #3b82f6;
     --gradient-end: #1d4ed8;
-    --avatar-size: 52px;
+    --status-active: #10b981;
+    --status-suspended: #f59e0b;
+    --status-graduated: #8b5cf6;
+  }
+
+  /* ---- Analytics Strip (glass, clickable) ---- */
+  .analytics-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding: 0.5rem 0.25rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 1.5rem;
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--card-shadow);
+    text-align: center;
+  }
+  .analytics-strip .stat-item {
+    display: flex;
+    flex-direction: column;
+    padding: 0.3rem 0;
+    border-radius: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    text-decoration: none;
+    color: inherit;
+  }
+  .analytics-strip .stat-item:hover {
+    background: rgba(59, 130, 246, 0.08);
+  }
+  .analytics-strip .stat-item:active {
+    transform: scale(0.96);
+  }
+  .analytics-strip .stat-number {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.2;
+  }
+  .analytics-strip .stat-number .currency {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .analytics-strip .stat-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-top: 0.1rem;
+  }
+  .analytics-strip .stat-item.pending .stat-number {
+    color: var(--danger);
+  }
+  .analytics-strip .stat-item.active .stat-number {
+    color: var(--primary);
+  }
+  .analytics-strip .stat-item.total .stat-number {
+    color: var(--text);
   }
 
   /* ---- Page Header ---- */
   .page-header {
-    position: relative;
-    padding: 0.25rem 0 0.5rem;
-    margin-bottom: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.5rem;
+    padding: 0 0.25rem;
   }
   .page-header h1 {
-    font-size: 2rem;
+    font-size: 1.8rem;
     font-weight: 800;
     margin: 0;
     background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
@@ -48,16 +119,12 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     letter-spacing: -0.02em;
   }
   .page-header .subtitle {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--muted);
-    margin-top: 0.1rem;
     font-weight: 500;
   }
-  .page-header .subtitle strong {
-    color: var(--text);
-  }
 
-  /* ---- FAB (Floating Action Button) ---- */
+  /* ---- FAB ---- */
   .fab-add {
     position: fixed;
     bottom: 100px;
@@ -66,10 +133,10 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     color: white;
     border: none;
     border-radius: 999px;
-    width: 60px;
-    height: 60px;
-    font-size: 2rem;
-    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4);
+    width: 56px;
+    height: 56px;
+    font-size: 1.8rem;
+    box-shadow: 0 8px 28px rgba(59, 130, 246, 0.35);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -78,19 +145,19 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s;
   }
   .fab-add:hover {
-    transform: scale(1.08);
-    box-shadow: 0 12px 40px rgba(59, 130, 246, 0.5);
+    transform: scale(1.06);
+    box-shadow: 0 12px 36px rgba(59, 130, 246, 0.45);
   }
   .fab-add:active {
     transform: scale(0.92);
   }
   .fab-add svg {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     stroke-width: 2.5;
   }
 
-  /* ---- Search & Filter Bar (Sticky) ---- */
+  /* ---- Search & Filter (Sticky) ---- */
   .search-section {
     position: sticky;
     top: 0;
@@ -108,7 +175,7 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-radius: 3rem;
-    padding: 0.25rem 0.25rem 0.25rem 1.2rem;
+    padding: 0.2rem 0.2rem 0.2rem 1.2rem;
     border: 1px solid var(--glass-border);
     box-shadow: 0 4px 20px rgba(0,0,0,0.04);
   }
@@ -116,7 +183,7 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     flex: 1;
     border: none;
     background: transparent;
-    font-size: 1rem;
+    font-size: 0.95rem;
     padding: 0.6rem 0;
     outline: none;
     color: var(--text);
@@ -131,17 +198,17 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     color: white;
     border: none;
     border-radius: 2.5rem;
-    padding: 0.5rem 1.4rem;
+    padding: 0.5rem 1.2rem;
     font-weight: 700;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.2s;
     white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
   }
   .search-bar button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
   }
   .filter-toggle {
     background: transparent;
@@ -152,7 +219,7 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     display: flex;
     align-items: center;
     gap: 0.3rem;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 500;
     border-radius: 2rem;
     transition: background 0.2s;
@@ -161,11 +228,11 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     background: var(--surface-alt);
   }
   .filter-toggle svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
   }
 
-  /* ---- Filter Drawer (Chips) ---- */
+  /* ---- Filter Drawer ---- */
   .filter-drawer {
     max-height: 0;
     overflow: hidden;
@@ -227,7 +294,7 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     background: var(--surface);
   }
 
-  /* ---- Student Cards ---- */
+  /* ---- Student Cards (status‑aware) ---- */
   .student-list {
     display: flex;
     flex-direction: column;
@@ -244,25 +311,36 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     box-shadow: var(--card-shadow);
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.8rem;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    overflow: hidden;
   }
+  /* Left accent bar – status color */
+  .student-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 0 2px 2px 0;
+  }
+  .student-card.status-active::before {
+    background: var(--status-active);
+    opacity: 0.6;
+  }
+  .student-card.status-suspended::before {
+    background: var(--status-suspended);
+    opacity: 0.6;
+  }
+  .student-card.status-graduated::before {
+    background: var(--status-graduated);
+    opacity: 0.6;
+  }
+
   .student-card:active {
     transform: scale(0.98);
-  }
-  .student-avatar {
-    width: var(--avatar-size);
-    height: var(--avatar-size);
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 1.3rem;
-    flex-shrink: 0;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
   }
   .student-info {
     flex: 1;
@@ -270,7 +348,7 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
   }
   .student-name {
     font-weight: 700;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     color: var(--text);
     display: flex;
     align-items: center;
@@ -285,11 +363,10 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    margin-left: 0.2rem;
   }
   .badge-active { background: #d1fae5; color: #065f46; }
-  .badge-suspended { background: #fed7aa; color: #9a3412; }
-  .badge-graduated { background: #e0e7ff; color: #3730a3; }
+  .badge-suspended { background: #fef3c7; color: #92400e; }
+  .badge-graduated { background: #ede9fe; color: #5b21b6; }
 
   .student-meta {
     font-size: 0.82rem;
@@ -305,9 +382,16 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     color: var(--muted);
     margin-top: 0.1rem;
   }
+  .student-father svg {
+    display: inline;
+    vertical-align: middle;
+    margin-right: 0.2rem;
+    width: 14px;
+    height: 14px;
+    stroke: var(--muted);
+  }
   .student-pending {
     font-weight: 700;
-    color: var(--danger);
     font-size: 0.9rem;
     margin-top: 0.15rem;
     display: inline-flex;
@@ -318,13 +402,25 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--danger);
     display: inline-block;
+  }
+  .student-pending .pending-dot.zero {
+    background: var(--status-active);
+    animation: none;
+  }
+  .student-pending .pending-dot.nonzero {
+    background: var(--danger);
     animation: pulse 1.5s infinite;
   }
   @keyframes pulse {
     0%, 100% { opacity: 0.4; transform: scale(0.9); }
     50% { opacity: 1; transform: scale(1.2); }
+  }
+  .student-pending .pending-amount {
+    color: var(--danger);
+  }
+  .student-pending .pending-amount.zero {
+    color: var(--status-active);
   }
 
   .student-actions {
@@ -434,10 +530,18 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* ---- Responsive Fine‑tuning ---- */
+  /* ---- Responsive ---- */
   @media (max-width: 480px) {
     .page-header h1 {
       font-size: 1.6rem;
+    }
+    .analytics-strip {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      padding: 0.4rem 0.2rem;
+    }
+    .analytics-strip .stat-number {
+      font-size: 1.1rem;
     }
     .search-bar input {
       font-size: 0.9rem;
@@ -448,19 +552,14 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
       padding: 0.4rem 1rem;
     }
     .fab-add {
-      width: 52px;
-      height: 52px;
+      width: 50px;
+      height: 50px;
       bottom: 85px;
       right: 1rem;
     }
     .fab-add svg {
-      width: 28px;
-      height: 28px;
-    }
-    .student-avatar {
-      width: 44px;
-      height: 44px;
-      font-size: 1rem;
+      width: 26px;
+      height: 26px;
     }
     .student-card {
       padding: 0.7rem 0.8rem;
@@ -477,10 +576,24 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
 <div class="page-header">
   <h1>Students</h1>
   <div class="subtitle">
-    <strong>{{ students.paginator.count|default:0 }}</strong> enrolled
-    <span style="margin:0 0.3rem;">•</span>
-    <span style="color: var(--primary); font-weight:600;">{{ students.paginator.num_pages }} pages</span>
+    {{ students.paginator.count|default:0 }} total
   </div>
+</div>
+
+<!-- ===== Analytics Strip (clickable) ===== -->
+<div class="analytics-strip">
+  <a href="?{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}" class="stat-item total">
+    <span class="stat-number">{{ students.paginator.count|default:0 }}</span>
+    <span class="stat-label">Total</span>
+  </a>
+  <a href="?pending_only=1{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}" class="stat-item pending">
+    <span class="stat-number">₹{{ total_pending_all|default:0|floatformat:2 }}</span>
+    <span class="stat-label">Pending</span>
+  </a>
+  <a href="?status=active{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}" class="stat-item active">
+    <span class="stat-number">{{ total_active|default:0 }}</span>
+    <span class="stat-label">Active</span>
+  </a>
 </div>
 
 <!-- Sticky Search & Filter -->
@@ -527,8 +640,7 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
 <div class="student-list" id="studentContainer">
   {% if students %}
     {% for s in students %}
-    <div class="student-card" data-name="{{ s.name|lower }}" data-roll="{{ s.roll_number|lower }}" data-father="{{ s.father_name|lower }}">
-      <div class="student-avatar">{{ s.name|slice:":1"|upper }}</div>
+    <div class="student-card status-{{ s.status }}" data-name="{{ s.name|lower }}" data-roll="{{ s.roll_number|lower }}" data-father="{{ s.father_name|lower }}">
       <div class="student-info">
         <div class="student-name">
           {{ s.name }}
@@ -539,12 +651,19 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
           <span class="separator">•</span>Roll {{ s.roll_number }}
         </div>
         <div class="student-father">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.2rem;"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+            <path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
           {{ s.father_name }}
         </div>
         <div class="student-pending">
-          <span class="pending-dot"></span>
-          Pending: ₹{{ s.pending_amount|floatformat:2 }}
+          <span class="pending-dot {% if s.pending_amount > 0 %}nonzero{% else %}zero{% endif %}"></span>
+          <span class="pending-amount {% if s.pending_amount == 0 %}zero{% endif %}">
+            Pending: ₹{{ s.pending_amount|floatformat:2 }}
+          </span>
         </div>
       </div>
       <div class="student-actions">
@@ -561,8 +680,8 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     <!-- Pagination -->
     <div class="pagination">
       {% if students.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">First</a>
-        <a href="?page={{ students.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">‹</a>
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.pending_only %}&pending_only=1{% endif %}">First</a>
+        <a href="?page={{ students.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.pending_only %}&pending_only=1{% endif %}">‹</a>
       {% else %}
         <span class="disabled">First</span>
         <span class="disabled">‹</span>
@@ -571,8 +690,8 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
       <span class="active">Page {{ students.number }} of {{ students.paginator.num_pages }}</span>
 
       {% if students.has_next %}
-        <a href="?page={{ students.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">›</a>
-        <a href="?page={{ students.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">Last</a>
+        <a href="?page={{ students.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.pending_only %}&pending_only=1{% endif %}">›</a>
+        <a href="?page={{ students.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.section %}&section={{ request.GET.section }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.pending_only %}&pending_only=1{% endif %}">Last</a>
       {% else %}
         <span class="disabled">›</span>
         <span class="disabled">Last</span>
@@ -617,6 +736,9 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
       if (section) params.set('section', section);
       const status = document.getElementById('statusSelect').value;
       if (status) params.set('status', status);
+      // Preserve pending_only if currently set
+      const pendingOnly = new URLSearchParams(window.location.search).get('pending_only');
+      if (pendingOnly) params.set('pending_only', pendingOnly);
       const url = window.location.pathname + '?' + params.toString();
       return url;
     }
@@ -640,29 +762,121 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     document.getElementById('statusSelect').addEventListener('change', applyFilters);
 
     // Open filter drawer if any filter is active
-    const hasFilters = {{ request.GET.grade|yesno:"true,false" }} || {{ request.GET.section|yesno:"true,false" }} || {{ request.GET.status|yesno:"true,false" }};
+    const hasFilters = {{ request.GET.grade|yesno:"true,false" }} || {{ request.GET.section|yesno:"true,false" }} || {{ request.GET.status|yesno:"true,false" }} || {{ request.GET.pending_only|yesno:"true,false" }};
     if (hasFilters) {
       drawer.classList.add('open');
     }
-
-    // Subtle fade‑in animation for cards (already handled by CSS)
   })();
 </script>
 {% endblock %}
 """
 
+# --------------------------------------------------------------------
+# 2. PATCH VIEWS.PY – add pending_only filter support
+# --------------------------------------------------------------------
+def patch_views():
+    with open(VIEWS_PATH, "r") as f:
+        content = f.read()
+
+    # Find get_student_list_context and add pending_only handling
+    # We'll add after the status filter block
+    pattern = r"(if status:\n            students = students\.filter\(status=status\)\n)"
+    replacement = r"""\1
+        # pending_only filter
+        pending_only = request.GET.get('pending_only')
+        if pending_only:
+            # Filter students with positive overall pending
+            # Since we compute pending_amount per student, we'll do it after the queryset
+            # We'll handle it by annotating a subquery (but for simplicity, we'll filter in the loop later)
+            # We'll set a flag to filter after computing pending_amount
+            # We'll add a placeholder; we'll filter in the list comprehension
+            # To avoid double query, we'll just mark it and filter later
+            pass"""
+        # Actually we need to filter after we compute pending_amount.
+        # We'll modify the part where we build the result list.
+        # Instead, we can filter the students queryset by a subquery that sums fee_records.
+        # For simplicity, we'll do it in the loop and skip students with 0 pending.
+        # But we need to know pending_only before the loop. We'll add a flag and then filter in the loop.
+        # Let's refactor: add a variable `show_only_pending = request.GET.get('pending_only') == '1'`
+        # Then in the loop, if show_only_pending and overall_pending == 0: continue.
+        # We'll add this logic after we compute overall_pending.
+        # So we need to insert code in the loop.
+
+        # Find the loop where we compute overall_pending.
+    # We'll add a flag before the loop
+    flag_pattern = r"(result = \[\])"
+    flag_replacement = r"""result = []
+        show_only_pending = request.GET.get('pending_only') == '1'"""
+
+    if re.search(flag_pattern, content):
+        content = re.sub(flag_pattern, flag_replacement, content, count=1)
+    else:
+        # fallback: insert after students_qs definition
+        fallback_pattern = r"(students_qs = Student\.objects\.all\(\))"
+        content = re.sub(fallback_pattern, r"\1\n        show_only_pending = request.GET.get('pending_only') == '1'", content)
+
+    # Now inside the loop, after computing overall_pending, add a check
+    loop_pattern = r"(for student in students_qs:\n            overall_pending = get_overall_pending\(student\)\n            if overall_pending <= 0:\n                continue)"
+    loop_replacement = r"""for student in students_qs:
+            overall_pending = get_overall_pending(student)
+            if show_only_pending and overall_pending <= 0:
+                continue
+            if overall_pending <= 0:
+                continue"""
+    # We need to be careful not to break existing logic. Actually the existing logic already skips if <=0.
+    # We'll just add the show_only_pending check before the existing skip.
+    # Let's rewrite the entire block to avoid complexity.
+    # We'll replace the whole for loop section with a new version.
+    # Find the loop start and end, but easier: we'll replace the whole block from "result = []" to the end of the loop.
+    # We'll use a pattern that captures the loop.
+    # Since the code is large, we'll do a targeted replacement.
+
+    # Actually, we can use a simpler approach: after we build the result list, we can filter it by pending_amount.
+    # But we need to keep the pagination working. So we should filter before pagination.
+    # We'll add a flag and then in the result building, if show_only_pending, we skip students with 0 pending.
+    # The existing code already skips if overall_pending <= 0, so we just need to add the flag.
+
+    # Let's just add the flag before the loop and then ensure the loop uses it.
+    # We'll search for "result = []" and insert the flag before it.
+    # We already did that.
+    # Now we need to modify the loop condition: if show_only_pending and overall_pending <= 0: continue
+    # That's already there because we changed it.
+
+    # Let's write the complete replacement for the loop section.
+    # We'll locate the start of the loop and replace everything until the sorting begins.
+    # But to avoid errors, we'll do a more robust approach: we'll insert a line after the overall_pending assignment.
+
+    # We'll search for "overall_pending = get_overall_pending(student)"
+    # and insert after it:
+    #             if show_only_pending and overall_pending <= 0:
+    #                 continue
+    pattern_loop = r"(overall_pending = get_overall_pending\(student\))"
+    replacement_loop = r"""\1
+            if show_only_pending and overall_pending <= 0:
+                continue"""
+    content = re.sub(pattern_loop, replacement_loop, content)
+
+    # Also need to add pending_only to the context for the template? Not needed, it's just a filter.
+
+    with open(VIEWS_PATH, "w") as f:
+        f.write(content)
+    print("✅ views.py patched – added pending_only filter support.")
+
+# --------------------------------------------------------------------
+# MAIN
+# --------------------------------------------------------------------
 def main():
-    TEMPLATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(TEMPLATE_PATH, "w") as f:
         f.write(NEW_TEMPLATE)
-    print("✅ Ultra‑premium mobile student list deployed.")
-    print("🎨 Design highlights:")
-    print("   - Glass‑morphism cards with avatars and status badges")
-    print("   - Sticky search bar with filter drawer")
-    print("   - Floating action button for adding students")
-    print("   - Smooth animations and micro‑interactions")
-    print("   - Fully responsive, mobile‑first")
-    print("🔄 Clear browser cache and restart server (if needed).")
+    print("✅ Template updated – theme‑matched, status colors, clickable analytics.")
+
+    patch_views()
+
+    print("\n🎯 All done! Restart your server and hard refresh.")
+    print("   Features: status‑specific card colors, red/green pending, clickable analytics.")
+    print("   Clicking on 'Pending' will show only students with pending fees.")
+    print("   Clicking on 'Active' will filter by active status.")
+    print("   Clicking on 'Total' resets the pending_only filter.")
 
 if __name__ == "__main__":
     main()

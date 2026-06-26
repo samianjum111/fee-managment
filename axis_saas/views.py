@@ -203,6 +203,8 @@ def get_student_list_context(request, schema_name):
         grades = list(Student.objects.values_list('grade', flat=True).distinct().order_by('grade'))
         sections = list(Student.objects.values_list('section', flat=True).distinct().order_by('section'))
         status_choices = Student.STATUS_CHOICES
+        total_pending_all = sum(s.pending_amount for s in students)
+        total_active = Student.objects.filter(status='active').count()
     return {
         'tenant': tenant,
         'students': page_obj,
@@ -424,8 +426,11 @@ def defaulters(request, schema_name):
         
         # Build result list with computed fields
         result = []
+        show_only_pending = request.GET.get('pending_only') == '1'
         for student in students_qs:
             overall_pending = get_overall_pending(student)
+            if show_only_pending and overall_pending <= 0:
+                continue
             if overall_pending <= 0:
                 continue  # skip students with zero overall pending
             
