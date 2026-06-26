@@ -1,48 +1,766 @@
 #!/usr/bin/env python3
 """
-mobile_nav_patcher.py
-Fixes the bottom nav "Collect" link to use mobile_fee_collection instead of fee_collection.
-Run: python3 mobile_nav_patcher.py
+Patcher to replace mobile fee collection template with a premium professional design.
+Run: python3 patch_mobile_collect_fee.py
 """
 
-import re
-from pathlib import Path
+import os
 
-BASE_DIR = Path(__file__).parent
-MOBILE_BASE = BASE_DIR / "templates" / "mobile" / "base.html"
+TEMPLATE_PATH = "templates/mobile/collect_fee.html"
 
-def patch_mobile_base():
-    if not MOBILE_BASE.exists():
-        print(f"❌ File not found: {MOBILE_BASE}")
+NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
+{% load fee_extras %}
+{% block title %}Collect Fee | {{ student.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ---- Premium Mobile Styles ---- */
+  :root {
+    --card-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+    --accent: #5B4AE0;
+    --accent-soft: rgba(91, 74, 224, 0.12);
+    --surface-card: rgba(255,255,255,0.95);
+  }
+
+  .page-hero {
+    background: linear-gradient(180deg, rgba(91,74,224,0.98), rgba(79,70,229,0.92));
+    color: white;
+    border-radius: 1.75rem;
+    padding: 1.4rem 1.25rem;
+    box-shadow: 0 24px 50px rgba(15,23,42,0.14);
+    margin-bottom: 1rem;
+  }
+  .page-hero h1 {
+    font-size: 1.35rem;
+    margin-bottom: 0.25rem;
+  }
+  .page-hero p {
+    color: rgba(255,255,255,0.9);
+    font-size: 0.9rem;
+  }
+  .student-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-top: 0.75rem;
+  }
+  .student-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: white;
+    flex-shrink: 0;
+  }
+  .student-detail h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .student-detail .meta {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.85);
+  }
+
+  /* Summary Cards */
+  .summary-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+  .summary-card {
+    background: var(--surface-card);
+    border-radius: 1.25rem;
+    padding: 0.9rem 1rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid rgba(148,163,184,0.12);
+    text-align: center;
+  }
+  .summary-card .label {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+  .summary-card .value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-strong);
+  }
+  .summary-card .value.pending { color: #ef4444; }
+
+  /* Payment Form */
+  .payment-panel {
+    background: var(--surface-card);
+    border-radius: 1.5rem;
+    padding: 1rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid rgba(148,163,184,0.12);
+    margin-bottom: 1rem;
+  }
+  .payment-form {
+    display: grid;
+    gap: 0.75rem;
+  }
+  .form-group {
+    display: grid;
+    gap: 0.3rem;
+  }
+  .form-group label {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-strong);
+  }
+  .form-group input,
+  .form-group select {
+    width: 100%;
+    padding: 0.8rem 1rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(148,163,184,0.2);
+    background: var(--surface);
+    font-size: 0.95rem;
+    transition: 0.2s;
+  }
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(91,74,224,0.15);
+  }
+  .form-group .hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .action-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+  }
+  .btn-primary, .btn-secondary {
+    border-radius: 1.1rem;
+    padding: 0.9rem 1rem;
+    border: none;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid rgba(148,163,184,0.2);
+  }
+  .btn-secondary:hover {
+    background: var(--surface-alt);
+  }
+
+  /* Pending Fees Accordion */
+  .pending-section {
+    background: var(--surface-card);
+    border-radius: 1.5rem;
+    padding: 0 1rem 1rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid rgba(148,163,184,0.12);
+    margin-bottom: 1rem;
+  }
+  .pending-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .pending-header h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .pending-header .badge {
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+  .pending-body {
+    display: none;
+    border-top: 1px solid rgba(148,163,184,0.12);
+    padding-top: 0.5rem;
+  }
+  .pending-body.open {
+    display: block;
+  }
+  .pending-record {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid rgba(148,163,184,0.08);
+    font-size: 0.85rem;
+  }
+  .pending-record:last-child {
+    border-bottom: none;
+  }
+  .pending-record .month {
+    font-weight: 600;
+  }
+  .pending-record .amount {
+    font-weight: 700;
+  }
+  .pending-record .amount.remaining {
+    color: #ef4444;
+  }
+
+  /* ---- Item Drawer (slide from right) ---- */
+  .drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+    display: none;
+    backdrop-filter: blur(4px);
+  }
+  .drawer-overlay.active {
+    display: block;
+  }
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 90%;
+    max-width: 460px;
+    height: 100%;
+    background: var(--surface);
+    z-index: 1000;
+    box-shadow: -8px 0 30px rgba(0,0,0,0.2);
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid rgba(148,163,184,0.2);
+  }
+  .drawer.open {
+    right: 0;
+  }
+  .drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(148,163,184,0.15);
+    flex-shrink: 0;
+  }
+  .drawer-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .drawer-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0 0.25rem;
+  }
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+  }
+  .drawer-body .filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .drawer-body .filter-bar input,
+  .drawer-body .filter-bar select {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+    border-radius: 2rem;
+    border: 1px solid rgba(148,163,184,0.2);
+    background: var(--surface-alt);
+    font-size: 0.85rem;
+  }
+  .item-grid {
+    display: grid;
+    gap: 0.85rem;
+  }
+  .item-card {
+    background: var(--surface-alt);
+    border-radius: 1rem;
+    padding: 0.8rem;
+    border: 1px solid rgba(148,163,184,0.1);
+    transition: 0.2s;
+  }
+  .item-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+  }
+  .item-card .chip {
+    display: inline-block;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    margin-bottom: 0.3rem;
+  }
+  .item-card h4 {
+    margin: 0.2rem 0;
+    font-size: 1rem;
+  }
+  .item-card .meta {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+  .item-card .add-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 0.4rem;
+    transition: 0.2s;
+  }
+  .item-card .add-btn:active {
+    transform: scale(0.96);
+  }
+
+  .cart-summary {
+    margin-top: 1.5rem;
+    border-top: 1px solid rgba(148,163,184,0.15);
+    padding-top: 0.75rem;
+  }
+  .cart-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    border-bottom: 1px dashed rgba(148,163,184,0.15);
+  }
+  .cart-item-row .name { font-weight: 600; }
+  .cart-item-row .qty-control {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .cart-item-row .qty-control button {
+    border: 1px solid rgba(148,163,184,0.2);
+    border-radius: 999px;
+    width: 28px;
+    height: 28px;
+    background: var(--surface);
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cart-total {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding-top: 0.5rem;
+  }
+  .cart-total .total-amount {
+    color: var(--accent);
+  }
+  .empty-cart {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 0.5rem 0;
+  }
+
+  /* Bottom fixed button */
+  .drawer-footer {
+    padding: 1rem;
+    border-top: 1px solid rgba(148,163,184,0.15);
+    flex-shrink: 0;
+  }
+  .drawer-footer .btn-primary {
+    width: 100%;
+  }
+
+  /* Responsive */
+  @media (max-width: 480px) {
+    .summary-strip {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+    }
+    .summary-card .value {
+      font-size: 1rem;
+    }
+    .action-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="page-hero">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+    <div>
+      <h1>Collect Fee</h1>
+      <p>Receive payment for {{ student.name }}</p>
+    </div>
+    <div class="student-avatar" style="background: rgba(255,255,255,0.2); width:44px; height:44px;">
+      {{ student.name|slice:":1"|upper }}
+    </div>
+  </div>
+  <div class="student-summary">
+    <div class="student-detail">
+      <h2>{{ student.name }}</h2>
+      <div class="meta">{{ student.grade }} • {{ student.section }} • Roll {{ student.roll_number }}</div>
+    </div>
+    <div style="margin-left:auto; background:rgba(255,255,255,0.15); padding:0.25rem 0.8rem; border-radius:999px; font-size:0.7rem;">
+      {{ student.status|capfirst }}
+    </div>
+  </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="summary-strip">
+  <div class="summary-card">
+    <div class="label">Pending Fee</div>
+    <div class="value pending" id="pendingDisplay">₹{{ total_pending|floatformat:2 }}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Items</div>
+    <div class="value" id="itemsTotalDisplay">₹0.00</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Total Due</div>
+    <div class="value" id="totalDueDisplay">₹{{ total_pending|floatformat:2 }}</div>
+  </div>
+</div>
+
+<!-- Payment Form -->
+<div class="payment-panel">
+  <form method="post" id="paymentForm" class="payment-form">
+    {% csrf_token %}
+    <input type="hidden" name="student_id" value="{{ student.id }}">
+    <input type="hidden" name="product_items_json" id="productItemsJson" value="[]">
+
+    <div class="form-group">
+      <label for="amountInput">Amount Received (₹)</label>
+      <input type="number" name="amount" id="amountInput" step="0.01" min="0" required placeholder="Enter amount">
+      <span class="hint" id="remainingHint">Remaining after payment: ₹0.00</span>
+    </div>
+
+    <div class="form-group">
+      <label for="paymentMode">Payment Mode</label>
+      <select name="payment_mode" id="paymentMode">
+        <option value="cash">Cash</option>
+        <option value="bank_transfer">Bank Transfer</option>
+        <option value="cheque">Cheque</option>
+        <option value="online">Online</option>
+      </select>
+    </div>
+
+    <div class="action-row">
+      <button type="button" id="openItemsDrawerBtn" class="btn-secondary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4v16m8-8H4"/></svg>
+        Add Items
+      </button>
+      <button type="submit" class="btn-primary" id="processPaymentBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+        Process Payment
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Pending Fees Accordion -->
+<div class="pending-section">
+  <div class="pending-header" id="pendingToggle">
+    <h3>Pending Fee Records</h3>
+    <span class="badge">{{ pending_records.count }} record(s)</span>
+  </div>
+  <div class="pending-body" id="pendingBody">
+    {% if pending_records %}
+      {% for record in pending_records %}
+      <div class="pending-record">
+        <span class="month">{{ record.month }}/{{ record.year }}</span>
+        <span class="amount">₹{{ record.amount|floatformat:2 }}</span>
+        <span class="amount remaining">₹{{ record.remaining|floatformat:2 }}</span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="pending-record" style="justify-content:center; color:var(--text-muted);">
+        No pending records.
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Item Drawer -->
+<div id="itemDrawerOverlay" class="drawer-overlay"></div>
+<div id="itemDrawer" class="drawer">
+  <div class="drawer-header">
+    <h3>Select Items</h3>
+    <button class="drawer-close" id="closeDrawerBtn">&times;</button>
+  </div>
+  <div class="drawer-body">
+    <div class="filter-bar">
+      <input type="text" id="itemSearchInput" placeholder="Search items...">
+      <select id="itemCategoryFilter">
+        <option value="">All</option>
+        {% for cat in categories %}
+          <option value="{{ cat.name }}">{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="item-grid" id="itemGrid">
+      {% for product in products %}
+      <div class="item-card" data-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.selling_price }}" data-stock="{{ product.quantity }}" data-category="{{ product.category.name }}">
+        <span class="chip">{{ product.category.name }}</span>
+        <h4>{{ product.name }}</h4>
+        <div class="meta">₹{{ product.selling_price|floatformat:2 }} • Stock: {{ product.quantity }}</div>
+        <button class="add-btn" data-id="{{ product.id }}">Add</button>
+      </div>
+      {% empty %}
+      <div style="text-align:center; color:var(--text-muted); padding:1rem;">No stock items available.</div>
+      {% endfor %}
+    </div>
+
+    <div class="cart-summary">
+      <div id="cartItems">
+        <div class="empty-cart">No items selected.</div>
+      </div>
+      <div class="cart-total">
+        <span>Item Total</span>
+        <span class="total-amount" id="cartTotalDisplay">₹0.00</span>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="btn-primary" id="doneDrawerBtn">Done – Close</button>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const schema = '{{ tenant.schema_name }}';
+    const studentId = {{ student.id }};
+    const basePending = parseFloat('{{ total_pending|floatformat:2 }}') || 0;
+
+    // DOM refs
+    const amountInput = document.getElementById('amountInput');
+    const remainingHint = document.getElementById('remainingHint');
+    const pendingDisplay = document.getElementById('pendingDisplay');
+    const itemsTotalDisplay = document.getElementById('itemsTotalDisplay');
+    const totalDueDisplay = document.getElementById('totalDueDisplay');
+    const productItemsJson = document.getElementById('productItemsJson');
+    const paymentForm = document.getElementById('paymentForm');
+
+    const openDrawerBtn = document.getElementById('openItemsDrawerBtn');
+    const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+    const doneDrawerBtn = document.getElementById('doneDrawerBtn');
+    const drawerOverlay = document.getElementById('itemDrawerOverlay');
+    const drawer = document.getElementById('itemDrawer');
+    const cartContainer = document.getElementById('cartItems');
+    const cartTotalDisplay = document.getElementById('cartTotalDisplay');
+
+    // Cart state
+    let cart = {};
+
+    // Utility
+    function fmt(v) { return '₹' + Number(v).toFixed(2); }
+
+    // Update all UI based on cart and amount
+    function refreshUI() {
+      const itemTotal = Object.values(cart).reduce((sum, item) => sum + item.price * item.qty, 0);
+      const totalDue = basePending + itemTotal;
+
+      // Update displays
+      pendingDisplay.textContent = fmt(basePending);
+      itemsTotalDisplay.textContent = fmt(itemTotal);
+      totalDueDisplay.textContent = fmt(totalDue);
+      cartTotalDisplay.textContent = fmt(itemTotal);
+
+      // Update amount input max and hint
+      amountInput.max = totalDue.toFixed(2);
+      const paid = parseFloat(amountInput.value) || 0;
+      const remaining = Math.max(totalDue - paid, 0);
+      remainingHint.textContent = 'Remaining after payment: ' + fmt(remaining);
+      if (paid > totalDue) {
+        amountInput.value = totalDue.toFixed(2);
+      }
+
+      // Update hidden JSON
+      const itemsArray = Object.values(cart).map(item => ({ product_id: item.id, quantity: item.qty }));
+      productItemsJson.value = JSON.stringify(itemsArray);
+
+      // Update cart UI
+      renderCart();
+    }
+
+    function renderCart() {
+      const entries = Object.values(cart);
+      if (entries.length === 0) {
+        cartContainer.innerHTML = '<div class="empty-cart">No items selected.</div>';
+        return;
+      }
+      let html = '';
+      entries.forEach(item => {
+        html += `<div class="cart-item-row">
+          <span class="name">${item.name}</span>
+          <div class="qty-control">
+            <button type="button" data-id="${item.id}" data-delta="-1">−</button>
+            <span>${item.qty}</span>
+            <button type="button" data-id="${item.id}" data-delta="1">+</button>
+          </div>
+        </div>`;
+      });
+      cartContainer.innerHTML = html;
+      // Attach qty controls
+      cartContainer.querySelectorAll('.qty-control button').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const id = Number(this.dataset.id);
+          const delta = Number(this.dataset.delta);
+          if (!cart[id]) return;
+          cart[id].qty += delta;
+          if (cart[id].qty <= 0) delete cart[id];
+          refreshUI();
+        });
+      });
+    }
+
+    // Add item to cart
+    function addItemToCart(id) {
+      const card = document.querySelector(`.item-card[data-id="${id}"]`);
+      if (!card) return;
+      const name = card.dataset.name;
+      const price = parseFloat(card.dataset.price);
+      const stock = parseInt(card.dataset.stock);
+      if (!cart[id]) {
+        cart[id] = { id, name, price, qty: 0 };
+      }
+      if (cart[id].qty >= stock) {
+        alert('Not enough stock.');
+        return;
+      }
+      cart[id].qty += 1;
+      refreshUI();
+    }
+
+    // Event listeners for "Add" buttons in drawer
+    function attachAddButtons() {
+      document.querySelectorAll('.add-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const id = Number(this.dataset.id);
+          addItemToCart(id);
+        });
+      });
+    }
+
+    // Drawer controls
+    function openDrawer() {
+      drawer.classList.add('open');
+      drawerOverlay.classList.add('active');
+      // Re-attach add buttons (in case new items loaded)
+      attachAddButtons();
+    }
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      drawerOverlay.classList.remove('active');
+    }
+
+    openDrawerBtn.addEventListener('click', openDrawer);
+    closeDrawerBtn.addEventListener('click', closeDrawer);
+    doneDrawerBtn.addEventListener('click', closeDrawer);
+    drawerOverlay.addEventListener('click', closeDrawer);
+
+    // Filter items in drawer
+    const searchInput = document.getElementById('itemSearchInput');
+    const categoryFilter = document.getElementById('itemCategoryFilter');
+    function filterItems() {
+      const search = searchInput.value.toLowerCase().trim();
+      const cat = categoryFilter.value;
+      document.querySelectorAll('.item-card').forEach(card => {
+        const name = card.dataset.name.toLowerCase();
+        const category = card.dataset.category || '';
+        let show = true;
+        if (search && !name.includes(search)) show = false;
+        if (cat && category !== cat) show = false;
+        card.style.display = show ? '' : 'none';
+      });
+    }
+    searchInput.addEventListener('input', filterItems);
+    categoryFilter.addEventListener('change', filterItems);
+
+    // Amount input validation
+    amountInput.addEventListener('input', function() {
+      const max = parseFloat(this.max) || 0;
+      let val = parseFloat(this.value) || 0;
+      if (val > max) this.value = max.toFixed(2);
+      refreshUI();
+    });
+
+    // Initial render
+    refreshUI();
+    attachAddButtons();
+
+    // Toggle pending fees accordion
+    const pendingToggle = document.getElementById('pendingToggle');
+    const pendingBody = document.getElementById('pendingBody');
+    pendingToggle.addEventListener('click', function() {
+      pendingBody.classList.toggle('open');
+    });
+    // Open by default if there are records
+    if ({{ pending_records.count }} > 0) {
+      pendingBody.classList.add('open');
+    }
+
+    // Ensure process payment button works (form submit)
+    // Already handled by form submission.
+
+    console.log('Mobile collect fee page loaded.');
+  })();
+</script>
+{% endblock %}
+"""
+
+def main():
+    if not os.path.exists(TEMPLATE_PATH):
+        print(f"⚠️ File not found: {TEMPLATE_PATH}")
         return
 
-    with open(MOBILE_BASE, "r") as f:
-        content = f.read()
+    with open(TEMPLATE_PATH, "w", encoding="utf-8") as f:
+        f.write(NEW_TEMPLATE)
 
-    # Look for the bottom nav "Collect" link
-    # We'll replace the url tag with the mobile version
-    old_href = r"{% url 'fee_collection' schema_name=tenant.schema_name %}"
-    new_href = "{% url 'mobile_fee_collection' schema_name=tenant.schema_name %}"
-
-    if old_href not in content:
-        print("⚠️ Could not find the exact 'fee_collection' URL tag in mobile/base.html")
-        # Fallback: try to replace the whole <a> tag using regex
-        pattern = r'<a href="{% url \'fee_collection\' schema_name=tenant\.schema_name %}" class="nav-item {% if \'fee_collection\' in request\.resolver_match\.url_name %}active{% endif %}>'
-        if re.search(pattern, content):
-            new_tag = '<a href="{% url \'mobile_fee_collection\' schema_name=tenant.schema_name %}" class="nav-item {% if \'fee_collection\' in request.resolver_match.url_name %}active{% endif %}>'
-            content = re.sub(pattern, new_tag, content)
-            print("✅ Patched using regex fallback")
-        else:
-            print("❌ Could not find any matching pattern. Please update manually.")
-            return
-    else:
-        content = content.replace(old_href, new_href)
-        print("✅ Replaced fee_collection with mobile_fee_collection in bottom nav")
-
-    with open(MOBILE_BASE, "w") as f:
-        f.write(content)
-
-    print("✅ Mobile base template updated. Restart server to apply changes.")
+    print(f"✅ Successfully updated {TEMPLATE_PATH} with premium mobile design.")
+    print("   Restart your server to see the changes.")
 
 if __name__ == "__main__":
-    patch_mobile_base()
+    main()

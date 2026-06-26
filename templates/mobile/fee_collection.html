@@ -233,7 +233,7 @@
 {% if pending_students %}
 <div class="pending-list">
   {% for student in pending_students %}
-  <a href="{% url 'fee_collection' schema_name=tenant.schema_name student_id=student.id %}" class="pending-card">
+  <a href="{% url 'mobile_fee_collection' schema_name=tenant.schema_name student_id=student.id %}" class="pending-card">
     <div class="pending-row">
       <div>
         <div class="pending-title">{{ student.name }}</div>
@@ -293,7 +293,7 @@
         <strong>Generate all fees</strong>
         <div class="pending-meta">Create fee records for the current period for all students.</div>
       </div>
-      <a href="{% url 'fee_collection' schema_name=tenant.schema_name %}" class="history-link">Go</a>
+      <a href="{% url 'mobile_fee_collection' schema_name=tenant.schema_name %}" class="history-link">Go</a>
     </div>
     <div class="history-item">
       <div>

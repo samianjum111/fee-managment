@@ -152,7 +152,7 @@
     <p>{{ student.grade }} • {{ student.section }} • Roll {{ student.roll_number }}</p>
   </div>
   <div class="profile-actions">
-    <a href="{% url 'fee_collection' schema_name=tenant.schema_name student_id=student.id %}" class="btn-primary">Collect Fee</a>
+    <a href="{% url 'mobile_fee_collection' schema_name=tenant.schema_name student_id=student.id %}" class="btn-primary">Collect Fee</a>
     <a href="{% url 'edit_student' schema_name=tenant.schema_name student_id=student.id %}" class="btn-secondary">Edit</a>
     <a href="{% url 'mobile_student_list' schema_name=tenant.schema_name %}" class="btn-secondary">Back</a>
   </div>
@@ -198,7 +198,7 @@
 
 <div class="section-title">
   <h2>Fee Records</h2>
-  <a href="{% url 'fee_collection' schema_name=tenant.schema_name student_id=student.id %}">New charge</a>
+  <a href="{% url 'mobile_fee_collection' schema_name=tenant.schema_name student_id=student.id %}">New charge</a>
 </div>
 <div class="history-list">
   {% if fee_records %}

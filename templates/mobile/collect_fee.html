@@ -4,432 +4,738 @@
 
 {% block extra_head %}
 <style>
-  .header-panel {
-    display: grid;
-    gap: 0.75rem;
+  /* ---- Premium Mobile Styles ---- */
+  :root {
+    --card-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+    --accent: #5B4AE0;
+    --accent-soft: rgba(91, 74, 224, 0.12);
+    --surface-card: rgba(255,255,255,0.95);
+  }
+
+  .page-hero {
+    background: linear-gradient(180deg, rgba(91,74,224,0.98), rgba(79,70,229,0.92));
+    color: white;
+    border-radius: 1.75rem;
+    padding: 1.4rem 1.25rem;
+    box-shadow: 0 24px 50px rgba(15,23,42,0.14);
     margin-bottom: 1rem;
   }
-  .header-panel h1 {
-    font-size: 1.45rem;
-  }
-  .student-card {
-    background: white;
-    border-radius: 1.5rem;
-    padding: 1rem;
-    border: 1px solid rgba(148,163,184,0.14);
-    box-shadow: 0 18px 35px rgba(15,23,42,0.06);
-    margin-bottom: 1rem;
-  }
-  .student-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.75rem;
-    align-items: center;
-    margin-bottom: 0.9rem;
-  }
-  .student-info strong {
-    display: block;
-    font-size: 1.1rem;
+  .page-hero h1 {
+    font-size: 1.35rem;
     margin-bottom: 0.25rem;
   }
-  .student-meta {
-    color: var(--text-muted);
+  .page-hero p {
+    color: rgba(255,255,255,0.9);
     font-size: 0.9rem;
   }
-  .status-pill {
-    background: rgba(91,74,224,0.1);
-    color: #5B4AE0;
-    padding: 0.35rem 0.75rem;
-    border-radius: 999px;
-    font-weight: 700;
-    font-size: 0.78rem;
-  }
-  .student-actions {
+  .student-summary {
     display: flex;
-    gap: 0.65rem;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.8rem;
+    margin-top: 0.75rem;
   }
-  .btn-primary,
-  .btn-secondary {
+  .student-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: white;
+    flex-shrink: 0;
+  }
+  .student-detail h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .student-detail .meta {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.85);
+  }
+
+  /* Summary Cards */
+  .summary-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+  .summary-card {
+    background: var(--surface-card);
+    border-radius: 1.25rem;
+    padding: 0.9rem 1rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid rgba(148,163,184,0.12);
+    text-align: center;
+  }
+  .summary-card .label {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+  .summary-card .value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-strong);
+  }
+  .summary-card .value.pending { color: #ef4444; }
+
+  /* Payment Form */
+  .payment-panel {
+    background: var(--surface-card);
+    border-radius: 1.5rem;
+    padding: 1rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid rgba(148,163,184,0.12);
+    margin-bottom: 1rem;
+  }
+  .payment-form {
+    display: grid;
+    gap: 0.75rem;
+  }
+  .form-group {
+    display: grid;
+    gap: 0.3rem;
+  }
+  .form-group label {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-strong);
+  }
+  .form-group input,
+  .form-group select {
+    width: 100%;
+    padding: 0.8rem 1rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(148,163,184,0.2);
+    background: var(--surface);
+    font-size: 0.95rem;
+    transition: 0.2s;
+  }
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(91,74,224,0.15);
+  }
+  .form-group .hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .action-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+  }
+  .btn-primary, .btn-secondary {
     border-radius: 1.1rem;
-    padding: 0.95rem 1rem;
+    padding: 0.9rem 1rem;
     border: none;
     font-weight: 700;
     text-align: center;
-    width: 100%;
+    cursor: pointer;
+    transition: 0.2s;
   }
   .btn-primary {
     background: var(--accent);
     color: white;
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
   }
   .btn-secondary {
     background: var(--surface);
     color: var(--text);
     border: 1px solid rgba(148,163,184,0.2);
   }
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-    margin-bottom: 1rem;
+  .btn-secondary:hover {
+    background: var(--surface-alt);
   }
-  .summary-card {
-    background: white;
-    padding: 1rem;
-    border-radius: 1.25rem;
-    border: 1px solid rgba(148,163,184,0.14);
-    box-shadow: 0 16px 35px rgba(15,23,42,0.06);
-  }
-  .summary-card .label {
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    margin-bottom: 0.45rem;
-  }
-  .summary-card .value {
-    font-size: 1.25rem;
-    font-weight: 700;
-  }
-  .payment-panel {
-    background: white;
+
+  /* Pending Fees Accordion */
+  .pending-section {
+    background: var(--surface-card);
     border-radius: 1.5rem;
-    padding: 1rem;
-    border: 1px solid rgba(148,163,184,0.14);
-    box-shadow: 0 18px 35px rgba(15,23,42,0.06);
+    padding: 0 1rem 1rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid rgba(148,163,184,0.12);
     margin-bottom: 1rem;
   }
-  .payment-grid {
-    display: grid;
-    gap: 0.75rem;
+  .pending-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+    cursor: pointer;
+    user-select: none;
   }
-  .payment-grid .form-field {
-    display: grid;
-    gap: 0.35rem;
-  }
-  .payment-grid label {
+  .pending-header h3 {
+    font-size: 1rem;
     font-weight: 700;
+    margin: 0;
+  }
+  .pending-header .badge {
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+  .pending-body {
+    display: none;
+    border-top: 1px solid rgba(148,163,184,0.12);
+    padding-top: 0.5rem;
+  }
+  .pending-body.open {
+    display: block;
+  }
+  .pending-record {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid rgba(148,163,184,0.08);
     font-size: 0.85rem;
   }
-  .payment-grid input,
-  .payment-grid select {
+  .pending-record:last-child {
+    border-bottom: none;
+  }
+  .pending-record .month {
+    font-weight: 600;
+  }
+  .pending-record .amount {
+    font-weight: 700;
+  }
+  .pending-record .amount.remaining {
+    color: #ef4444;
+  }
+
+  /* ---- Item Drawer (slide from right) ---- */
+  .drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
-    padding: 0.85rem 1rem;
-    border-radius: 1rem;
-    border: 1px solid rgba(148,163,184,0.22);
-    background: var(--surface);
-  }
-  .payment-actions {
-    display: grid;
-    gap: 0.75rem;
-  }
-  .drawer-overlay,
-  .drawer {
+    height: 100%;
+    background: rgba(0,0,0,0.5);
     z-index: 999;
+    display: none;
+    backdrop-filter: blur(4px);
+  }
+  .drawer-overlay.active {
+    display: block;
+  }
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 90%;
+    max-width: 460px;
+    height: 100%;
+    background: var(--surface);
+    z-index: 1000;
+    box-shadow: -8px 0 30px rgba(0,0,0,0.2);
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid rgba(148,163,184,0.2);
+  }
+  .drawer.open {
+    right: 0;
   }
   .drawer-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 0.7rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid rgba(148,163,184,0.18);
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(148,163,184,0.15);
+    flex-shrink: 0;
+  }
+  .drawer-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .drawer-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0 0.25rem;
   }
   .drawer-body {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    padding: 1rem 0;
+    flex: 1;
     overflow-y: auto;
-    max-height: calc(100vh - 200px);
+    padding: 1rem;
+  }
+  .drawer-body .filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .drawer-body .filter-bar input,
+  .drawer-body .filter-bar select {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+    border-radius: 2rem;
+    border: 1px solid rgba(148,163,184,0.2);
+    background: var(--surface-alt);
+    font-size: 0.85rem;
   }
   .item-grid {
     display: grid;
     gap: 0.85rem;
   }
   .item-card {
-    background: var(--surface);
+    background: var(--surface-alt);
     border-radius: 1rem;
-    padding: 0.9rem;
-    border: 1px solid rgba(148,163,184,0.14);
+    padding: 0.8rem;
+    border: 1px solid rgba(148,163,184,0.1);
+    transition: 0.2s;
+  }
+  .item-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+  }
+  .item-card .chip {
+    display: inline-block;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    margin-bottom: 0.3rem;
   }
   .item-card h4 {
-    margin: 0 0 0.4rem;
+    margin: 0.2rem 0;
     font-size: 1rem;
   }
-  .item-card p {
-    margin: 0.2rem 0;
+  .item-card .meta {
     color: var(--text-muted);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
   }
+  .item-card .add-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 0.4rem;
+    transition: 0.2s;
+  }
+  .item-card .add-btn:active {
+    transform: scale(0.96);
+  }
+
   .cart-summary {
-    display: grid;
-    gap: 0.55rem;
-    margin-top: 1rem;
+    margin-top: 1.5rem;
+    border-top: 1px solid rgba(148,163,184,0.15);
+    padding-top: 0.75rem;
   }
-  .cart-item {
+  .cart-item-row {
     display: flex;
     justify-content: space-between;
-    gap: 0.75rem;
     align-items: center;
-    padding: 0.8rem;
-    background: var(--surface);
-    border-radius: 1rem;
-    border: 1px solid rgba(148,163,184,0.14);
+    padding: 0.4rem 0;
+    border-bottom: 1px dashed rgba(148,163,184,0.15);
   }
-  .cart-item button {
-    border: 1px solid rgba(148,163,184,0.22);
+  .cart-item-row .name { font-weight: 600; }
+  .cart-item-row .qty-control {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .cart-item-row .qty-control button {
+    border: 1px solid rgba(148,163,184,0.2);
     border-radius: 999px;
-    width: 32px;
-    height: 32px;
-    background: white;
-    color: var(--text);
+    width: 28px;
+    height: 28px;
+    background: var(--surface);
     cursor: pointer;
-  }
-  .pending-table {
-    background: white;
-    border-radius: 1.5rem;
-    padding: 1rem;
-    border: 1px solid rgba(148,163,184,0.14);
-    box-shadow: 0 18px 35px rgba(15,23,42,0.06);
-  }
-  .pending-table h2 {
     font-size: 1rem;
-    margin-bottom: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  .pending-entry {
-    display: grid;
-    gap: 0.45rem;
-    padding: 0.9rem;
-    border-bottom: 1px solid rgba(148,163,184,0.14);
+  .cart-total {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding-top: 0.5rem;
   }
-  .pending-entry:last-child {
-    border-bottom: none;
+  .cart-total .total-amount {
+    color: var(--accent);
   }
-  .pending-entry strong {
-    font-size: 0.95rem;
-  }
-  .pending-entry small {
+  .empty-cart {
     color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 0.5rem 0;
   }
-  .card-footnote {
-    margin-top: 0.75rem;
-    color: var(--text-muted);
-    font-size: 0.88rem;
+
+  /* Bottom fixed button */
+  .drawer-footer {
+    padding: 1rem;
+    border-top: 1px solid rgba(148,163,184,0.15);
+    flex-shrink: 0;
+  }
+  .drawer-footer .btn-primary {
+    width: 100%;
+  }
+
+  /* Responsive */
+  @media (max-width: 480px) {
+    .summary-strip {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+    }
+    .summary-card .value {
+      font-size: 1rem;
+    }
+    .action-row {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
 {% endblock %}
 
 {% block body %}
-<div class="header-panel">
-  <div>
-    <h1>Collect Fee</h1>
-    <p>Receive payment for {{ student.name }}. The mobile form applies fee first, then selected stock items.</p>
-  </div>
-  <div class="student-actions">
-    <a href="{% url 'mobile_student_profile' schema_name=tenant.schema_name student_id=student.id %}" class="btn-secondary">Profile</a>
-    <a href="{% url 'mobile_student_list' schema_name=tenant.schema_name %}" class="btn-secondary">Back</a>
-  </div>
-</div>
-
-<div class="student-card">
-  <div class="student-row">
-    <div class="student-info">
-      <strong>{{ student.name }}</strong>
-      <div class="student-meta">{{ student.grade }} • {{ student.section }} • Roll {{ student.roll_number }}</div>
+<div class="page-hero">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+    <div>
+      <h1>Collect Fee</h1>
+      <p>Receive payment for {{ student.name }}</p>
     </div>
-    <span class="status-pill">{{ student.status|capfirst }}</span>
+    <div class="student-avatar" style="background: rgba(255,255,255,0.2); width:44px; height:44px;">
+      {{ student.name|slice:":1"|upper }}
+    </div>
   </div>
-  <div class="student-row">
-    <div class="student-meta">Father: {{ student.father_name }} • {{ student.parent_mobile }}</div>
-  </div>
-</div>
-
-<div class="summary-grid">
-  <div class="summary-card">
-    <div class="label">Total Fee</div>
-    <div class="value">₹{{ total_pending|floatformat:2 }}</div>
-  </div>
-  <div class="summary-card">
-    <div class="label">Pending Balance</div>
-    <div class="value">₹{{ total_pending|floatformat:2 }}</div>
-  </div>
-  <div class="summary-card">
-    <div class="label">Records</div>
-    <div class="value">{{ pending_records.count }}</div>
-  </div>
-  <div class="summary-card">
-    <div class="label">Stock items</div>
-    <div class="value">{{ products|length }}</div>
+  <div class="student-summary">
+    <div class="student-detail">
+      <h2>{{ student.name }}</h2>
+      <div class="meta">{{ student.grade }} • {{ student.section }} • Roll {{ student.roll_number }}</div>
+    </div>
+    <div style="margin-left:auto; background:rgba(255,255,255,0.15); padding:0.25rem 0.8rem; border-radius:999px; font-size:0.7rem;">
+      {{ student.status|capfirst }}
+    </div>
   </div>
 </div>
 
+<!-- Summary Cards -->
+<div class="summary-strip">
+  <div class="summary-card">
+    <div class="label">Pending Fee</div>
+    <div class="value pending" id="pendingDisplay">₹{{ total_pending|floatformat:2 }}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Items</div>
+    <div class="value" id="itemsTotalDisplay">₹0.00</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Total Due</div>
+    <div class="value" id="totalDueDisplay">₹{{ total_pending|floatformat:2 }}</div>
+  </div>
+</div>
+
+<!-- Payment Form -->
 <div class="payment-panel">
-  <form method="post" id="paymentForm" class="payment-grid">
+  <form method="post" id="paymentForm" class="payment-form">
     {% csrf_token %}
     <input type="hidden" name="student_id" value="{{ student.id }}">
     <input type="hidden" name="product_items_json" id="productItemsJson" value="[]">
 
-    <div class="form-field">
-      <label>Amount Received (₹)</label>
+    <div class="form-group">
+      <label for="amountInput">Amount Received (₹)</label>
       <input type="number" name="amount" id="amountInput" step="0.01" min="0" required placeholder="Enter amount">
+      <span class="hint" id="remainingHint">Remaining after payment: ₹0.00</span>
     </div>
-    <div class="form-field">
-      <label>Payment Mode</label>
-      <select name="payment_mode">
+
+    <div class="form-group">
+      <label for="paymentMode">Payment Mode</label>
+      <select name="payment_mode" id="paymentMode">
         <option value="cash">Cash</option>
         <option value="bank_transfer">Bank Transfer</option>
         <option value="cheque">Cheque</option>
         <option value="online">Online</option>
       </select>
     </div>
-    <div class="form-field">
-      <label>Remaining After Payment</label>
-      <input type="text" id="remainingAfter" readonly placeholder="Will be calculated">
-    </div>
-    <div class="payment-actions">
-      <button type="button" id="openItemsDrawerBtn" class="btn-secondary">Add Items</button>
-      <button type="submit" class="btn-primary">Process Payment</button>
+
+    <div class="action-row">
+      <button type="button" id="openItemsDrawerBtn" class="btn-secondary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4v16m8-8H4"/></svg>
+        Add Items
+      </button>
+      <button type="submit" class="btn-primary" id="processPaymentBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+        Process Payment
+      </button>
     </div>
   </form>
-
-  <div class="card-footnote">Note: Payment is first applied to pending fees. Selected items are added automatically at checkout.</div>
 </div>
 
-<div class="pending-table">
-  <h2>Pending fee records</h2>
-  {% if pending_records %}
-    {% for record in pending_records %}
-    <div class="pending-entry">
-      <strong>{{ record.month }}/{{ record.year }} • ₹{{ record.amount|floatformat:2 }}</strong>
-      <small>Paid ₹{{ record.paid_amount|floatformat:2 }}, Remaining ₹{{ record.remaining|floatformat:2 }}, Due {{ record.due_date|date:'d MMM yyyy' }}</small>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="pending-entry">
-      <strong>No pending fee records</strong>
-      <small>Generate the current month fee from student profile or fee collection list.</small>
-    </div>
-  {% endif %}
+<!-- Pending Fees Accordion -->
+<div class="pending-section">
+  <div class="pending-header" id="pendingToggle">
+    <h3>Pending Fee Records</h3>
+    <span class="badge">{{ pending_records.count }} record(s)</span>
+  </div>
+  <div class="pending-body" id="pendingBody">
+    {% if pending_records %}
+      {% for record in pending_records %}
+      <div class="pending-record">
+        <span class="month">{{ record.month }}/{{ record.year }}</span>
+        <span class="amount">₹{{ record.amount|floatformat:2 }}</span>
+        <span class="amount remaining">₹{{ record.remaining|floatformat:2 }}</span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="pending-record" style="justify-content:center; color:var(--text-muted);">
+        No pending records.
+      </div>
+    {% endif %}
+  </div>
 </div>
 
+<!-- Item Drawer -->
 <div id="itemDrawerOverlay" class="drawer-overlay"></div>
 <div id="itemDrawer" class="drawer">
   <div class="drawer-header">
-    <div>
-      <strong>Select items to sell</strong>
-      <div class="student-meta">Stock items reduce quantity automatically once payment is processed.</div>
-    </div>
-    <div style="display:flex;gap:0.5rem;">
-      <button type="button" id="doneDrawerBtn" class="btn-primary">Done</button>
-      <button type="button" id="closeDrawerBtn" class="btn-secondary">Close</button>
-    </div>
+    <h3>Select Items</h3>
+    <button class="drawer-close" id="closeDrawerBtn">&times;</button>
   </div>
   <div class="drawer-body">
-    <div class="item-grid">
+    <div class="filter-bar">
+      <input type="text" id="itemSearchInput" placeholder="Search items...">
+      <select id="itemCategoryFilter">
+        <option value="">All</option>
+        {% for cat in categories %}
+          <option value="{{ cat.name }}">{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="item-grid" id="itemGrid">
       {% for product in products %}
-      <article class="item-card" data-product-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.selling_price }}" data-qty="{{ product.quantity }}" data-category="{{ product.category.name }}">
-        <div class="item-chip">{{ product.category.name }}</div>
+      <div class="item-card" data-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.selling_price }}" data-stock="{{ product.quantity }}" data-category="{{ product.category.name }}">
+        <span class="chip">{{ product.category.name }}</span>
         <h4>{{ product.name }}</h4>
-        <p class="item-meta">₹{{ product.selling_price|floatformat:2 }} • Stock {{ product.quantity }}</p>
-        <p class="item-meta">{{ product.notes|default:'No notes.' }}</p>
-        <button type="button" class="btn-mini add-item-btn">Add</button>
-      </article>
+        <div class="meta">₹{{ product.selling_price|floatformat:2 }} • Stock: {{ product.quantity }}</div>
+        <button class="add-btn" data-id="{{ product.id }}">Add</button>
+      </div>
+      {% empty %}
+      <div style="text-align:center; color:var(--text-muted); padding:1rem;">No stock items available.</div>
       {% endfor %}
-      {% if not products %}
-      <div class="empty-state">No stock items available. Add inventory from stock management.</div>
-      {% endif %}
     </div>
 
     <div class="cart-summary">
-      <div class="cart-item" id="cartEmptyState">No items selected yet.</div>
-      <div class="cart-item" style="justify-content:space-between;">
-        <span>Total</span>
-        <strong>₹<span id="cartTotal">0.00</span></strong>
+      <div id="cartItems">
+        <div class="empty-cart">No items selected.</div>
       </div>
-      <div class="cart-item" style="justify-content:space-between;">
-        <span>Items</span>
-        <strong id="cartCount">0</strong>
+      <div class="cart-total">
+        <span>Item Total</span>
+        <span class="total-amount" id="cartTotalDisplay">₹0.00</span>
       </div>
     </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="btn-primary" id="doneDrawerBtn">Done – Close</button>
   </div>
 </div>
 
 <script>
-const amountInput = document.getElementById('amountInput');
-const remainingSpan = document.getElementById('remainingAfter');
-const productItemsJson = document.getElementById('productItemsJson');
-const openDrawerBtn = document.getElementById('openItemsDrawerBtn');
-const closeDrawerBtn = document.getElementById('closeDrawerBtn');
-const doneDrawerBtn = document.getElementById('doneDrawerBtn');
-const drawerOverlay = document.getElementById('itemDrawerOverlay');
-const drawer = document.getElementById('itemDrawer');
-const cartTotal = document.getElementById('cartTotal');
-const cartCount = document.getElementById('cartCount');
-const cartEmptyState = document.getElementById('cartEmptyState');
-const itemCart = {};
-const basePending = parseFloat('{{ total_pending|floatformat:2 }}');
+  (function() {
+    const schema = '{{ tenant.schema_name }}';
+    const studentId = {{ student.id }};
+    const basePending = parseFloat('{{ total_pending|floatformat:2 }}') || 0;
 
-function formatMoney(value) {
-  return '₹' + Number(value || 0).toFixed(2);
-}
-function openDrawer() {
-  drawer.classList.add('open');
-  drawerOverlay.classList.add('active');
-}
-function closeDrawer() {
-  drawer.classList.remove('open');
-  drawerOverlay.classList.remove('active');
-}
-function updateRemaining() {
-  const paid = parseFloat(amountInput.value) || 0;
-  const itemTotal = Object.values(itemCart).reduce((sum, item) => sum + item.price * item.qty, 0);
-  const totalDue = basePending + itemTotal;
-  remainingSpan.value = formatMoney(Math.max(totalDue - paid, 0));
-}
-function syncCart() {
-  const items = Object.values(itemCart);
-  const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  cartTotal.textContent = total.toFixed(2);
-  cartCount.textContent = items.reduce((sum, item) => sum + item.qty, 0);
-  productItemsJson.value = JSON.stringify(items.map(item => ({ product_id: item.id, quantity: item.qty })));
-  cartEmptyState.textContent = items.length ? '' : 'No items selected yet.';
-  updateRemaining();
-}
-function addToCartHandler(event) {
-  const card = event.target.closest('.item-card');
-  if (!card) return;
-  const id = Number(card.dataset.productId);
-  const qtyAvail = Number(card.dataset.qty);
-  const price = Number(card.dataset.price);
-  const name = card.dataset.name;
-  const entry = itemCart[id] || { id, name, price, qty: 0 };
-  if (entry.qty >= qtyAvail) {
-    alert('Insufficient stock for ' + name);
-    return;
-  }
-  entry.qty += 1;
-  itemCart[id] = entry;
-  syncCart();
-}
-function changeQty(id, delta) {
-  if (!itemCart[id]) return;
-  itemCart[id].qty += delta;
-  if (itemCart[id].qty <= 0) delete itemCart[id];
-  syncCart();
-}
-function attachItemButtons() {
-  document.querySelectorAll('.add-item-btn').forEach(button => {
-    button.addEventListener('click', addToCartHandler);
-  });
-}
-openDrawerBtn.addEventListener('click', openDrawer);
-closeDrawerBtn.addEventListener('click', closeDrawer);
-doneDrawerBtn.addEventListener('click', closeDrawer);
-drawerOverlay.addEventListener('click', closeDrawer);
-amountInput.addEventListener('input', () => {
-  if (parseFloat(amountInput.value) < 0) amountInput.value = '0.00';
-  updateRemaining();
-});
-attachItemButtons();
-syncCart();
+    // DOM refs
+    const amountInput = document.getElementById('amountInput');
+    const remainingHint = document.getElementById('remainingHint');
+    const pendingDisplay = document.getElementById('pendingDisplay');
+    const itemsTotalDisplay = document.getElementById('itemsTotalDisplay');
+    const totalDueDisplay = document.getElementById('totalDueDisplay');
+    const productItemsJson = document.getElementById('productItemsJson');
+    const paymentForm = document.getElementById('paymentForm');
+
+    const openDrawerBtn = document.getElementById('openItemsDrawerBtn');
+    const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+    const doneDrawerBtn = document.getElementById('doneDrawerBtn');
+    const drawerOverlay = document.getElementById('itemDrawerOverlay');
+    const drawer = document.getElementById('itemDrawer');
+    const cartContainer = document.getElementById('cartItems');
+    const cartTotalDisplay = document.getElementById('cartTotalDisplay');
+
+    // Cart state
+    let cart = {};
+
+    // Utility
+    function fmt(v) { return '₹' + Number(v).toFixed(2); }
+
+    // Update all UI based on cart and amount
+    function refreshUI() {
+      const itemTotal = Object.values(cart).reduce((sum, item) => sum + item.price * item.qty, 0);
+      const totalDue = basePending + itemTotal;
+
+      // Update displays
+      pendingDisplay.textContent = fmt(basePending);
+      itemsTotalDisplay.textContent = fmt(itemTotal);
+      totalDueDisplay.textContent = fmt(totalDue);
+      cartTotalDisplay.textContent = fmt(itemTotal);
+
+      // Update amount input max and hint
+      amountInput.max = totalDue.toFixed(2);
+      const paid = parseFloat(amountInput.value) || 0;
+      const remaining = Math.max(totalDue - paid, 0);
+      remainingHint.textContent = 'Remaining after payment: ' + fmt(remaining);
+      if (paid > totalDue) {
+        amountInput.value = totalDue.toFixed(2);
+      }
+
+      // Update hidden JSON
+      const itemsArray = Object.values(cart).map(item => ({ product_id: item.id, quantity: item.qty }));
+      productItemsJson.value = JSON.stringify(itemsArray);
+
+      // Update cart UI
+      renderCart();
+    }
+
+    function renderCart() {
+      const entries = Object.values(cart);
+      if (entries.length === 0) {
+        cartContainer.innerHTML = '<div class="empty-cart">No items selected.</div>';
+        return;
+      }
+      let html = '';
+      entries.forEach(item => {
+        html += `<div class="cart-item-row">
+          <span class="name">${item.name}</span>
+          <div class="qty-control">
+            <button type="button" data-id="${item.id}" data-delta="-1">−</button>
+            <span>${item.qty}</span>
+            <button type="button" data-id="${item.id}" data-delta="1">+</button>
+          </div>
+        </div>`;
+      });
+      cartContainer.innerHTML = html;
+      // Attach qty controls
+      cartContainer.querySelectorAll('.qty-control button').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const id = Number(this.dataset.id);
+          const delta = Number(this.dataset.delta);
+          if (!cart[id]) return;
+          cart[id].qty += delta;
+          if (cart[id].qty <= 0) delete cart[id];
+          refreshUI();
+        });
+      });
+    }
+
+    // Add item to cart
+    function addItemToCart(id) {
+      const card = document.querySelector(`.item-card[data-id="${id}"]`);
+      if (!card) return;
+      const name = card.dataset.name;
+      const price = parseFloat(card.dataset.price);
+      const stock = parseInt(card.dataset.stock);
+      if (!cart[id]) {
+        cart[id] = { id, name, price, qty: 0 };
+      }
+      if (cart[id].qty >= stock) {
+        alert('Not enough stock.');
+        return;
+      }
+      cart[id].qty += 1;
+      refreshUI();
+    }
+
+    // Event listeners for "Add" buttons in drawer
+    function attachAddButtons() {
+      document.querySelectorAll('.add-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const id = Number(this.dataset.id);
+          addItemToCart(id);
+        });
+      });
+    }
+
+    // Drawer controls
+    function openDrawer() {
+      drawer.classList.add('open');
+      drawerOverlay.classList.add('active');
+      // Re-attach add buttons (in case new items loaded)
+      attachAddButtons();
+    }
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      drawerOverlay.classList.remove('active');
+    }
+
+    openDrawerBtn.addEventListener('click', openDrawer);
+    closeDrawerBtn.addEventListener('click', closeDrawer);
+    doneDrawerBtn.addEventListener('click', closeDrawer);
+    drawerOverlay.addEventListener('click', closeDrawer);
+
+    // Filter items in drawer
+    const searchInput = document.getElementById('itemSearchInput');
+    const categoryFilter = document.getElementById('itemCategoryFilter');
+    function filterItems() {
+      const search = searchInput.value.toLowerCase().trim();
+      const cat = categoryFilter.value;
+      document.querySelectorAll('.item-card').forEach(card => {
+        const name = card.dataset.name.toLowerCase();
+        const category = card.dataset.category || '';
+        let show = true;
+        if (search && !name.includes(search)) show = false;
+        if (cat && category !== cat) show = false;
+        card.style.display = show ? '' : 'none';
+      });
+    }
+    searchInput.addEventListener('input', filterItems);
+    categoryFilter.addEventListener('change', filterItems);
+
+    // Amount input validation
+    amountInput.addEventListener('input', function() {
+      const max = parseFloat(this.max) || 0;
+      let val = parseFloat(this.value) || 0;
+      if (val > max) this.value = max.toFixed(2);
+      refreshUI();
+    });
+
+    // Initial render
+    refreshUI();
+    attachAddButtons();
+
+    // Toggle pending fees accordion
+    const pendingToggle = document.getElementById('pendingToggle');
+    const pendingBody = document.getElementById('pendingBody');
+    pendingToggle.addEventListener('click', function() {
+      pendingBody.classList.toggle('open');
+    });
+    // Open by default if there are records
+    if ({{ pending_records.count }} > 0) {
+      pendingBody.classList.add('open');
+    }
+
+    // Ensure process payment button works (form submit)
+    // Already handled by form submission.
+
+    console.log('Mobile collect fee page loaded.');
+  })();
 </script>
 {% endblock %}
