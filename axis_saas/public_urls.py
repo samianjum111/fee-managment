@@ -112,6 +112,7 @@ def login_required_for_schema(view_func):
 # Wrap all portal views with portal_wrapper to ensure SchoolClient exists
 dashboard_view = portal_wrapper(login_required_for_schema(dashboard))
 mobile_dashboard_view = portal_wrapper(login_required_for_schema(mobile_dashboard))
+mobile_more_view = portal_wrapper(login_required_for_schema(mobile_more))
 student_list_view = portal_wrapper(login_required_for_schema(student_list))
 student_profile_view = portal_wrapper(login_required_for_schema(student_profile))
 fee_collection_view = portal_wrapper(login_required_for_schema(fee_collection))
