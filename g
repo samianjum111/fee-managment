@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-AXIS Mobile Student List – Premium UI/UX Upgrade v2
-Replaces templates/mobile/student_list.html with a modern, premium design.
-Run: python patch_mobile_student_list_ui_v2.py
+AXIS Ultra‑Premium Mobile Student List
+Replaces templates/mobile/student_list.html with a world‑class design.
+Run: python patch_ultra_premium_student_list.py
 """
 
 import os
@@ -17,173 +17,252 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
 
 {% block extra_head %}
 <style>
-  /* ---- Premium Mobile Student List ---- */
+  /* ============================================================
+     ULTRA PREMIUM MOBILE STUDENT LIST – AXIS DESIGN SYSTEM
+     ============================================================ */
+
   :root {
-    --card-shadow: 0 8px 24px rgba(15,23,42,0.06);
-    --card-radius: 1.25rem;
-    --glass-bg: rgba(255,255,255,0.88);
-    --glass-border: rgba(255,255,255,0.5);
+    --card-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    --card-radius: 1.5rem;
+    --glass-bg: rgba(255, 255, 255, 0.92);
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --gradient-start: #3b82f6;
+    --gradient-end: #1d4ed8;
+    --avatar-size: 52px;
   }
 
+  /* ---- Page Header ---- */
   .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-    padding: 0 0.25rem;
+    position: relative;
+    padding: 0.25rem 0 0.5rem;
+    margin-bottom: 0.75rem;
   }
   .page-header h1 {
-    font-size: 1.6rem;
-    font-weight: 700;
+    font-size: 2rem;
+    font-weight: 800;
     margin: 0;
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    letter-spacing: -0.02em;
+  }
+  .page-header .subtitle {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 0.1rem;
+    font-weight: 500;
+  }
+  .page-header .subtitle strong {
+    color: var(--text);
   }
 
-  /* ---- Sticky Search Bar ---- */
-  .search-sticky {
+  /* ---- FAB (Floating Action Button) ---- */
+  .fab-add {
+    position: fixed;
+    bottom: 100px;
+    right: 1.5rem;
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    color: white;
+    border: none;
+    border-radius: 999px;
+    width: 60px;
+    height: 60px;
+    font-size: 2rem;
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s;
+  }
+  .fab-add:hover {
+    transform: scale(1.08);
+    box-shadow: 0 12px 40px rgba(59, 130, 246, 0.5);
+  }
+  .fab-add:active {
+    transform: scale(0.92);
+  }
+  .fab-add svg {
+    width: 32px;
+    height: 32px;
+    stroke-width: 2.5;
+  }
+
+  /* ---- Search & Filter Bar (Sticky) ---- */
+  .search-section {
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 20;
     background: var(--bg);
     padding: 0.5rem 0 0.75rem;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
   .search-bar {
     display: flex;
     gap: 0.5rem;
     align-items: center;
     background: var(--glass-bg);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-radius: 2.5rem;
-    padding: 0.3rem 0.3rem 0.3rem 1rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 3rem;
+    padding: 0.25rem 0.25rem 0.25rem 1.2rem;
     border: 1px solid var(--glass-border);
-    box-shadow: var(--card-shadow);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.04);
   }
   .search-bar input {
     flex: 1;
     border: none;
     background: transparent;
-    font-size: 0.95rem;
-    padding: 0.5rem 0;
+    font-size: 1rem;
+    padding: 0.6rem 0;
     outline: none;
     color: var(--text);
+    font-weight: 500;
   }
   .search-bar input::placeholder {
     color: var(--muted);
+    font-weight: 400;
   }
   .search-bar button {
-    background: var(--primary);
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
     color: white;
     border: none;
-    border-radius: 2rem;
-    padding: 0.5rem 1.2rem;
-    font-weight: 600;
-    font-size: 0.85rem;
+    border-radius: 2.5rem;
+    padding: 0.5rem 1.4rem;
+    font-weight: 700;
+    font-size: 0.9rem;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s;
     white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
   }
   .search-bar button:hover {
-    background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35);
   }
   .filter-toggle {
     background: transparent;
     border: none;
     color: var(--muted);
-    padding: 0.3rem;
+    padding: 0.4rem 0.6rem;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 0.2rem;
-    font-size: 0.8rem;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-radius: 2rem;
+    transition: background 0.2s;
+  }
+  .filter-toggle:hover {
+    background: var(--surface-alt);
   }
   .filter-toggle svg {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
   }
 
-  /* ---- Filter Drawer (slide down) ---- */
+  /* ---- Filter Drawer (Chips) ---- */
   .filter-drawer {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s ease, padding 0.3s ease;
-    padding: 0 0.5rem;
+    transition: max-height 0.35s ease, padding 0.35s ease, opacity 0.3s;
+    opacity: 0;
+    padding: 0 0.75rem;
     background: var(--glass-bg);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-radius: 0 0 1.25rem 1.25rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 0 0 1.5rem 1.5rem;
     margin: 0 0 1rem 0;
     border-left: 1px solid var(--glass-border);
     border-right: 1px solid var(--glass-border);
     border-bottom: 1px solid var(--glass-border);
-    box-shadow: var(--card-shadow);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.04);
   }
   .filter-drawer.open {
-    max-height: 300px;
-    padding: 0.75rem 0.5rem;
+    max-height: 400px;
+    padding: 0.75rem 0.75rem 1rem;
+    opacity: 1;
   }
-  .filter-drawer .filter-grid {
+  .filter-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+    align-items: center;
   }
-  .filter-drawer select {
-    flex: 1 1 120px;
-    padding: 0.4rem 0.6rem;
+  .filter-chips select {
+    flex: 1 1 110px;
+    padding: 0.4rem 0.7rem;
     border-radius: 2rem;
     border: 1px solid var(--border);
     background: var(--surface-alt);
     font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+    padding-right: 2rem;
   }
-  .filter-drawer .clear-link {
+  .filter-chips .clear-link {
     background: var(--surface-alt);
     color: var(--text);
     padding: 0.4rem 1rem;
     border-radius: 2rem;
     border: 1px solid var(--border);
-    font-weight: 500;
+    font-weight: 600;
     text-decoration: none;
     font-size: 0.85rem;
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+    transition: all 0.2s;
+  }
+  .filter-chips .clear-link:hover {
+    background: var(--surface);
   }
 
   /* ---- Student Cards ---- */
+  .student-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    animation: fadeInUp 0.4s ease;
+  }
   .student-card {
     background: var(--glass-bg);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-radius: var(--card-radius);
     padding: 0.9rem 1rem;
-    margin-bottom: 0.85rem;
     border: 1px solid var(--glass-border);
     box-shadow: var(--card-shadow);
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    transition: transform 0.15s ease, box-shadow 0.2s;
+    gap: 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
   .student-card:active {
-    transform: scale(0.99);
+    transform: scale(0.98);
   }
   .student-avatar {
-    width: 48px;
-    height: 48px;
+    width: var(--avatar-size);
+    height: var(--avatar-size);
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: 1.2rem;
+    font-size: 1.3rem;
     flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
   }
   .student-info {
     flex: 1;
@@ -191,31 +270,63 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
   }
   .student-name {
     font-weight: 700;
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
   }
-  .student-meta {
-    font-size: 0.82rem;
-    color: var(--muted);
-    margin-top: 0.1rem;
-  }
-  .student-meta .badge {
+  .student-name .badge {
     display: inline-block;
     padding: 0.1rem 0.5rem;
     border-radius: 999px;
-    font-size: 0.65rem;
-    font-weight: 600;
-    margin-left: 0.3rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-left: 0.2rem;
   }
   .badge-active { background: #d1fae5; color: #065f46; }
   .badge-suspended { background: #fed7aa; color: #9a3412; }
   .badge-graduated { background: #e0e7ff; color: #3730a3; }
-  .student-pending {
-    font-weight: 600;
-    color: var(--danger);
-    font-size: 0.9rem;
+
+  .student-meta {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+  }
+  .student-meta .separator {
+    margin: 0 0.3rem;
+    opacity: 0.4;
+  }
+  .student-father {
+    font-size: 0.78rem;
+    color: var(--muted);
     margin-top: 0.1rem;
   }
+  .student-pending {
+    font-weight: 700;
+    color: var(--danger);
+    font-size: 0.9rem;
+    margin-top: 0.15rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .student-pending .pending-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    display: inline-block;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+
   .student-actions {
     display: flex;
     gap: 0.3rem;
@@ -225,7 +336,7 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     background: var(--surface-alt);
     border: 1px solid var(--border);
     border-radius: 2rem;
-    padding: 0.25rem 0.6rem;
+    padding: 0.3rem 0.6rem;
     font-size: 0.7rem;
     font-weight: 600;
     text-decoration: none;
@@ -241,8 +352,8 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     border-color: var(--primary);
   }
   .student-actions a svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
 
   /* ---- Pagination ---- */
@@ -250,17 +361,18 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     display: flex;
     justify-content: center;
     gap: 0.4rem;
-    margin-top: 1.2rem;
+    margin-top: 1.5rem;
     flex-wrap: wrap;
   }
   .pagination a, .pagination span {
-    padding: 0.3rem 0.8rem;
+    padding: 0.4rem 0.9rem;
     border-radius: 2rem;
     border: 1px solid var(--border);
     background: var(--surface);
     text-decoration: none;
     color: var(--text);
-    font-size: 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 500;
     transition: all 0.2s;
   }
   .pagination a:hover {
@@ -281,57 +393,81 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
   /* ---- Empty State ---- */
   .empty-state {
     text-align: center;
-    padding: 3rem 1rem;
+    padding: 3rem 1.5rem;
     color: var(--muted);
   }
   .empty-state svg {
+    width: 80px;
+    height: 80px;
+    stroke: var(--muted);
     opacity: 0.3;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .empty-state h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.3rem;
+  }
+  .empty-state p {
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
   }
   .empty-state a {
     color: var(--primary);
     font-weight: 600;
     text-decoration: none;
+    border: 1px solid var(--primary);
+    padding: 0.5rem 1.2rem;
+    border-radius: 2rem;
+    display: inline-block;
+    transition: all 0.2s;
   }
-
-  /* ---- FAB (Floating Action Button) ---- */
-  .fab-add {
-    position: fixed;
-    bottom: 90px;
-    right: 1.2rem;
+  .empty-state a:hover {
     background: var(--primary);
     color: white;
-    border: none;
-    border-radius: 999px;
-    width: 56px;
-    height: 56px;
-    font-size: 1.8rem;
-    box-shadow: 0 8px 24px rgba(59,130,246,0.35);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 20;
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-  .fab-add:active {
-    transform: scale(0.92);
   }
 
-  /* ---- Responsive ---- */
+  /* ---- Animations ---- */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ---- Responsive Fine‑tuning ---- */
   @media (max-width: 480px) {
-    .student-card {
-      flex-wrap: wrap;
-    }
-    .student-actions {
-      width: 100%;
-      justify-content: flex-end;
+    .page-header h1 {
+      font-size: 1.6rem;
     }
     .search-bar input {
-      font-size: 0.85rem;
+      font-size: 0.9rem;
+      padding: 0.4rem 0;
     }
-    .filter-toggle span {
-      display: none;
+    .search-bar button {
+      font-size: 0.8rem;
+      padding: 0.4rem 1rem;
+    }
+    .fab-add {
+      width: 52px;
+      height: 52px;
+      bottom: 85px;
+      right: 1rem;
+    }
+    .fab-add svg {
+      width: 28px;
+      height: 28px;
+    }
+    .student-avatar {
+      width: 44px;
+      height: 44px;
+      font-size: 1rem;
+    }
+    .student-card {
+      padding: 0.7rem 0.8rem;
+      gap: 0.7rem;
+    }
+    .student-name {
+      font-size: 1rem;
     }
   }
 </style>
@@ -340,13 +476,15 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
 {% block body %}
 <div class="page-header">
   <h1>Students</h1>
-  <div style="font-size:0.8rem; color:var(--muted);">
-    {{ students.paginator.count|default:0 }} total
+  <div class="subtitle">
+    <strong>{{ students.paginator.count|default:0 }}</strong> enrolled
+    <span style="margin:0 0.3rem;">•</span>
+    <span style="color: var(--primary); font-weight:600;">{{ students.paginator.num_pages }} pages</span>
   </div>
 </div>
 
 <!-- Sticky Search & Filter -->
-<div class="search-sticky">
+<div class="search-section">
   <div class="search-bar">
     <input type="search" id="searchInput" placeholder="Search name, roll, father..." value="{{ search_query }}" autocomplete="off">
     <button id="searchBtn">Search</button>
@@ -354,11 +492,11 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M4 6h16M4 12h16M4 18h16"/>
       </svg>
-      <span>Filters</span>
+      <span>Filter</span>
     </button>
   </div>
   <div class="filter-drawer" id="filterDrawer">
-    <div class="filter-grid">
+    <div class="filter-chips">
       <select name="grade" id="gradeSelect">
         <option value="">All Grades</option>
         {% for g in grades %}
@@ -386,19 +524,28 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
 </div>
 
 <!-- Student Cards -->
-<div id="studentContainer">
+<div class="student-list" id="studentContainer">
   {% if students %}
     {% for s in students %}
     <div class="student-card" data-name="{{ s.name|lower }}" data-roll="{{ s.roll_number|lower }}" data-father="{{ s.father_name|lower }}">
       <div class="student-avatar">{{ s.name|slice:":1"|upper }}</div>
       <div class="student-info">
-        <div class="student-name">{{ s.name }}</div>
-        <div class="student-meta">
-          {{ s.grade }} • {{ s.section }} • Roll {{ s.roll_number }}
+        <div class="student-name">
+          {{ s.name }}
           <span class="badge badge-{{ s.status }}">{{ s.get_status_display }}</span>
         </div>
-        <div class="student-meta">Father: {{ s.father_name }}</div>
-        <div class="student-pending">Pending: ₹{{ s.pending_amount|floatformat:2 }}</div>
+        <div class="student-meta">
+          {{ s.grade }}<span class="separator">•</span>{{ s.section }}
+          <span class="separator">•</span>Roll {{ s.roll_number }}
+        </div>
+        <div class="student-father">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.2rem;"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          {{ s.father_name }}
+        </div>
+        <div class="student-pending">
+          <span class="pending-dot"></span>
+          Pending: ₹{{ s.pending_amount|floatformat:2 }}
+        </div>
       </div>
       <div class="student-actions">
         <a href="{% url 'mobile_student_profile' schema_name=tenant.schema_name student_id=s.id %}" title="Profile">
@@ -433,19 +580,20 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
     </div>
   {% else %}
     <div class="empty-state">
-      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="12" cy="12" r="10"/>
         <path d="M8 12h8"/>
       </svg>
-      <p>No students found.</p>
-      <a href="{% url 'add_student_mobile' schema_name=tenant.schema_name %}">Add your first student</a>
+      <h3>No students yet</h3>
+      <p>Start by adding your first student.</p>
+      <a href="{% url 'add_student_mobile' schema_name=tenant.schema_name %}">➕ Add Student</a>
     </div>
   {% endif %}
 </div>
 
-<!-- FAB for Add -->
+<!-- Floating Action Button -->
 <a href="{% url 'add_student_mobile' schema_name=tenant.schema_name %}" class="fab-add" aria-label="Add Student">
-  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
 </a>
 
 <script>
@@ -458,20 +606,17 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
       drawer.classList.toggle('open');
     });
 
-    // Search: live filtering with debounce
-    const searchInput = document.getElementById('searchInput');
-    const searchBtn = document.getElementById('searchBtn');
-    const gradeSelect = document.getElementById('gradeSelect');
-    const sectionSelect = document.getElementById('sectionSelect');
-    const statusSelect = document.getElementById('statusSelect');
-
+    // Build URL with current filters
     function buildUrl() {
       const params = new URLSearchParams();
-      const q = searchInput.value.trim();
+      const q = document.getElementById('searchInput').value.trim();
       if (q) params.set('q', q);
-      if (gradeSelect.value) params.set('grade', gradeSelect.value);
-      if (sectionSelect.value) params.set('section', sectionSelect.value);
-      if (statusSelect.value) params.set('status', statusSelect.value);
+      const grade = document.getElementById('gradeSelect').value;
+      if (grade) params.set('grade', grade);
+      const section = document.getElementById('sectionSelect').value;
+      if (section) params.set('section', section);
+      const status = document.getElementById('statusSelect').value;
+      if (status) params.set('status', status);
       const url = window.location.pathname + '?' + params.toString();
       return url;
     }
@@ -480,47 +625,44 @@ NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
       window.location.href = buildUrl();
     }
 
-    // On button click
-    searchBtn.addEventListener('click', applyFilters);
-
-    // Enter key in search input
-    searchInput.addEventListener('keypress', function(e) {
+    // Search button & Enter key
+    document.getElementById('searchBtn').addEventListener('click', applyFilters);
+    document.getElementById('searchInput').addEventListener('keypress', function(e) {
       if (e.key === 'Enter') {
         e.preventDefault();
         applyFilters();
       }
     });
 
-    // Auto‑submit on select change (optional, but nice)
-    gradeSelect.addEventListener('change', applyFilters);
-    sectionSelect.addEventListener('change', applyFilters);
-    statusSelect.addEventListener('change', applyFilters);
+    // Auto‑submit on select change
+    document.getElementById('gradeSelect').addEventListener('change', applyFilters);
+    document.getElementById('sectionSelect').addEventListener('change', applyFilters);
+    document.getElementById('statusSelect').addEventListener('change', applyFilters);
 
-    // If there is a search query, keep the input value (it's already there from template)
-    // Ensure filter drawer is open if any filter is active
+    // Open filter drawer if any filter is active
     const hasFilters = {{ request.GET.grade|yesno:"true,false" }} || {{ request.GET.section|yesno:"true,false" }} || {{ request.GET.status|yesno:"true,false" }};
     if (hasFilters) {
       drawer.classList.add('open');
     }
 
-    // Live client‑side filtering (optional, but for instant feedback we can add a simple filter)
-    // For now, we rely on server‑side pagination, which is better for large datasets.
+    // Subtle fade‑in animation for cards (already handled by CSS)
   })();
 </script>
 {% endblock %}
 """
 
 def main():
-    # Ensure directory exists
     TEMPLATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-
     with open(TEMPLATE_PATH, "w") as f:
         f.write(NEW_TEMPLATE)
-
-    print(f"✅ Updated {TEMPLATE_PATH} with premium UI v2.")
-    print("✅ Features: sticky search, filter drawer, FAB, avatar cards.")
-    print("🔄 Clear your browser cache and hard reload (Ctrl+F5 or Cmd+Shift+R).")
-    print("▶️ Restart server: python manage.py runserver")
+    print("✅ Ultra‑premium mobile student list deployed.")
+    print("🎨 Design highlights:")
+    print("   - Glass‑morphism cards with avatars and status badges")
+    print("   - Sticky search bar with filter drawer")
+    print("   - Floating action button for adding students")
+    print("   - Smooth animations and micro‑interactions")
+    print("   - Fully responsive, mobile‑first")
+    print("🔄 Clear browser cache and restart server (if needed).")
 
 if __name__ == "__main__":
     main()
