@@ -221,7 +221,7 @@
         <div class="icon">₹</div>
         <strong>Collect fee</strong>
     </a>
-    <a href="{% url 'defaulters' schema_name=tenant.schema_name %}" class="action-tile">
+    <a href="{% url 'mobile_defaulters' schema_name=tenant.schema_name %}" class="action-tile">
         <div class="icon">⚠️</div>
         <strong>Defaulters</strong>
     </a>
@@ -255,7 +255,7 @@
 
 <div class="section-heading">
     <h2>Top defaulters</h2>
-    <a href="{% url 'defaulters' schema_name=tenant.schema_name %}">View all</a>
+    <a href="{% url 'mobile_defaulters' schema_name=tenant.schema_name %}">View all</a>
 </div>
 <div class="defaulter-card">
     {% if top_defaulters %}

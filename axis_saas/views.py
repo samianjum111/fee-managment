@@ -393,7 +393,7 @@ def fee_receipt(request, schema_name, receipt_id, force_mobile=False):
 
 @require_tenant_type(['school'])
 @require_school_feature('defaulters')
-def defaulters(request, schema_name):
+def defaulters(request, schema_name, force_mobile=False):
     """Defaulters list with search, filters, pagination, and analytics KPIs.
        Now includes students with overall pending (fee + items) even if no pending fee record.
     """
@@ -499,7 +499,8 @@ def defaulters(request, schema_name):
         'sections': sections,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
-    return render(request, 'tenant/defaulters.html', context)
+    template = 'mobile/defaulters.html' if force_mobile else 'tenant/defaulters.html'
+    return render(request, template, context)
 
 @require_tenant_type(['school'])
 @require_school_feature('reports')
@@ -2853,3 +2854,11 @@ def sell_separately(request, schema_name, mobile=False):
 def mobile_sell_separately(request, schema_name):
     """Mobile version of sell separately page."""
     return sell_separately(request, schema_name, mobile=True)
+
+
+# ------------------- Mobile Defaulters -------------------
+@require_tenant_type(['school'])
+@require_school_feature('defaulters')
+def mobile_defaulters(request, schema_name):
+    """Mobile version of defaulters page."""
+    return defaulters(request, schema_name, force_mobile=True)
