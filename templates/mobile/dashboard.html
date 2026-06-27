@@ -225,7 +225,7 @@
         <div class="icon">⚠️</div>
         <strong>Defaulters</strong>
     </a>
-    <a href="{% url 'reports' schema_name=tenant.schema_name %}" class="action-tile">
+    <a href="{% url 'mobile_reports' schema_name=tenant.schema_name %}" class="action-tile">
         <div class="icon">📊</div>
         <strong>Reports</strong>
     </a>
@@ -233,7 +233,7 @@
 
 <div class="section-heading">
     <h2>Recent payments</h2>
-    <a href="{% url 'reports' schema_name=tenant.schema_name %}?type=collection&quick_filter=all">See all</a>
+    <a href="{% url 'mobile_reports' schema_name=tenant.schema_name %}?type=collection&quick_filter=all">See all</a>
 </div>
 <div class="activity-card">
     {% if recent_payments %}

@@ -504,7 +504,7 @@ def defaulters(request, schema_name, force_mobile=False):
 
 @require_tenant_type(['school'])
 @require_school_feature('reports')
-def reports(request, schema_name):
+def reports(request, schema_name, force_mobile=False):
     tenant = get_tenant(request, schema_name)
     report_type = request.GET.get('type', 'collection')
     today = timezone.localdate()
@@ -641,7 +641,8 @@ def reports(request, schema_name):
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
             'total_collection_all': total_collection_all,
         }
-    return render(request, 'tenant/reports.html', context)
+        template = 'mobile/reports.html' if force_mobile else 'tenant/reports.html'
+    return render(request, template, context)
 
 @require_tenant_type(['school'])
 @require_school_feature('fee_collection')
@@ -2862,3 +2863,11 @@ def mobile_sell_separately(request, schema_name):
 def mobile_defaulters(request, schema_name):
     """Mobile version of defaulters page."""
     return defaulters(request, schema_name, force_mobile=True)
+
+
+# ------------------- Mobile Reports -------------------
+@require_tenant_type(['school'])
+@require_school_feature('reports')
+def mobile_reports(request, schema_name):
+    """Mobile version of reports page."""
+    return reports(request, schema_name, force_mobile=True)
