@@ -1168,6 +1168,9 @@ def edit_student(request, schema_name, student_id):
             if form.is_valid():
                 form.save()
                 messages.success(request, f"Student {student.name} updated successfully.")
+                # Redirect to mobile profile if mobile user agent
+                if is_mobile_user_agent(request):
+                    return redirect('mobile_student_profile', schema_name=schema_name, student_id=student.id)
                 return redirect("student_profile", schema_name=schema_name, student_id=student.id)
         else:
             form = StudentForm(instance=student)
@@ -1177,9 +1180,6 @@ def edit_student(request, schema_name, student_id):
             "logo_url": tenant.school_logo.url if tenant.school_logo else None,
         }
     return render(request, "tenant/student_form.html", context)
-
-
-# ------------------- API: Fee Status -------------------
 @csrf_exempt
 @require_http_methods(["GET"])
 def fee_status_api(request):

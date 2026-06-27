@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
 """
-Patcher: Replace mobile/student_profile.html with premium design.
-Run: python3 patch_profile.py
+Final patcher for mobile student profile:
+- Premium UI/UX (SVG icons, modern cards, modals)
+- Inline edit modal (no page reload)
+- Transcript modal (full fee/payment history)
+- Edit view redirect fix for mobile
+Run: python3 patch_profile_final.py
 """
 
 import os
+import re
 
-NEW_CONTENT = """{% extends 'mobile/base.html' %}
+# ============================================================
+# 1. NEW TEMPLATE CONTENT (mobile/student_profile.html)
+# ============================================================
+NEW_TEMPLATE = """{% extends 'mobile/base.html' %}
 {% load fee_extras %}
 {% block title %}{{ student.name }} | Profile{% endblock %}
 
 {% block extra_head %}
 <style>
-  /* ---------- Premium profile styles ---------- */
+  /* ---------- Premium Profile Styles ---------- */
   .profile-hero {
     background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
     border-radius: 24px;
@@ -91,6 +99,10 @@ NEW_CONTENT = """{% extends 'mobile/base.html' %}
     color: white;
     backdrop-filter: blur(4px);
     border: 1px solid rgba(255,255,255,0.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
   }
   .profile-actions .btn-primary {
     background: #3b82f6;
@@ -130,14 +142,15 @@ NEW_CONTENT = """{% extends 'mobile/base.html' %}
     align-items: center;
     gap: 6px;
   }
+  .stat-card .label svg {
+    width: 16px;
+    height: 16px;
+    stroke: var(--text-muted);
+  }
   .stat-card .value {
     font-size: 1.3rem;
     font-weight: 700;
     margin-top: 4px;
-  }
-  .stat-card .icon {
-    font-size: 1.2rem;
-    opacity: 0.6;
   }
 
   /* Info grid */
@@ -177,6 +190,13 @@ NEW_CONTENT = """{% extends 'mobile/base.html' %}
     font-size: 1rem;
     font-weight: 700;
     margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-title h2 svg {
+    width: 18px;
+    height: 18px;
   }
   .section-title a {
     color: var(--accent, #3b82f6);
@@ -238,6 +258,117 @@ NEW_CONTENT = """{% extends 'mobile/base.html' %}
     color: var(--text-muted);
     font-size: 0.9rem;
   }
+
+  /* ---------- MODAL OVERLAY ---------- */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active {
+    display: flex;
+  }
+  .modal-box {
+    background: var(--surface);
+    border-radius: 24px;
+    max-width: 500px;
+    width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 24px 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    position: relative;
+  }
+  .modal-box .modal-close {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 1.8rem;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+  .modal-box h2 {
+    margin-top: 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .modal-box .form-group {
+    margin-bottom: 14px;
+  }
+  .modal-box .form-group label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+  .modal-box .form-group input,
+  .modal-box .form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    font-size: 0.95rem;
+  }
+  .modal-box .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: flex-end;
+  }
+  .modal-box .btn-primary,
+  .modal-box .btn-secondary {
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+  }
+  .modal-box .btn-primary {
+    background: var(--primary);
+    color: white;
+  }
+  .modal-box .btn-secondary {
+    background: var(--surface-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  /* Transcript table inside modal */
+  .transcript-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin: 10px 0;
+  }
+  .transcript-table th,
+  .transcript-table td {
+    padding: 8px 6px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .transcript-table th {
+    background: var(--surface-alt);
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .transcript-total {
+    font-weight: 700;
+    margin-top: 10px;
+    text-align: right;
+  }
 </style>
 {% endblock %}
 
@@ -253,27 +384,61 @@ NEW_CONTENT = """{% extends 'mobile/base.html' %}
     </div>
   </div>
   <div class="profile-actions">
-    <a href="{% url 'mobile_fee_collection' schema_name=tenant.schema_name student_id=student.id %}" class="btn-primary">💰 Collect Fee</a>
-    <a href="{% url 'edit_student' schema_name=tenant.schema_name student_id=student.id %}" class="btn-secondary">✏️ Edit</a>
+    <a href="{% url 'mobile_fee_collection' schema_name=tenant.schema_name student_id=student.id %}" class="btn-primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+      </svg>
+      Collect Fee
+    </a>
+    <button class="btn-secondary" id="editProfileBtn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+        <path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4Z"/>
+      </svg>
+      Edit
+    </button>
   </div>
 </div>
 
 <!-- Stats -->
 <div class="stats-grid">
   <div class="stat-card">
-    <div class="label"><span class="icon">📊</span> Total Fee</div>
+    <div class="label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+        <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
+      </svg>
+      Total Fee
+    </div>
     <div class="value">₹{{ total_fee|floatformat:2 }}</div>
   </div>
   <div class="stat-card">
-    <div class="label"><span class="icon">✅</span> Paid</div>
+    <div class="label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 6L9 17l-5-5"/>
+      </svg>
+      Paid
+    </div>
     <div class="value">₹{{ total_paid|floatformat:2 }}</div>
   </div>
   <div class="stat-card">
-    <div class="label"><span class="icon">⏳</span> Pending</div>
+    <div class="label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 6v6l4 2"/>
+      </svg>
+      Pending
+    </div>
     <div class="value">₹{{ pending_total|floatformat:2 }}</div>
   </div>
   <div class="stat-card">
-    <div class="label"><span class="icon">🛒</span> Items Cost</div>
+    <div class="label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 7h-4.18A3 3 0 0016 5.18V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v1.18A3 3 0 008.18 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/>
+        <path d="M12 12v4m-2-2h4"/>
+      </svg>
+      Items Cost
+    </div>
     <div class="value">₹{{ item_purchase_total|floatformat:2 }}</div>
   </div>
 </div>
@@ -300,7 +465,15 @@ NEW_CONTENT = """{% extends 'mobile/base.html' %}
 
 <!-- Fee Records -->
 <div class="section-title">
-  <h2>📋 Fee Records</h2>
+  <h2>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+    Fee Records
+  </h2>
   <a href="{% url 'mobile_fee_collection' schema_name=tenant.schema_name student_id=student.id %}">+ New Charge</a>
 </div>
 <div class="history-list">
@@ -321,10 +494,16 @@ NEW_CONTENT = """{% extends 'mobile/base.html' %}
 
 <!-- Payment History -->
 <div class="section-title">
-  <h2>💳 Payment History</h2>
-  {% if payments.object_list %}
-    <a href="{% url 'fee_receipt' schema_name=tenant.schema_name receipt_id=payments.object_list.0.payment.id %}">Latest Receipt</a>
-  {% endif %}
+  <h2>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="2" y="5" width="20" height="14" rx="2" ry="2"/>
+      <line x1="2" y1="10" x2="22" y2="10"/>
+    </svg>
+    Payment History
+  </h2>
+  <button id="viewTranscriptBtn" class="link-btn" style="background:none; border:none; color:var(--accent, #3b82f6); font-weight:600; font-size:0.85rem; cursor:pointer;">
+    View Transcript
+  </button>
 </div>
 <div class="history-list">
   {% if payments %}
@@ -344,23 +523,287 @@ NEW_CONTENT = """{% extends 'mobile/base.html' %}
   {% endif %}
 </div>
 
-<!-- Back button (bottom) -->
+<!-- Back button -->
 <div style="margin-top: 24px; text-align: center;">
-  <a href="{% url 'mobile_student_list' schema_name=tenant.schema_name %}" style="color: var(--text-muted); text-decoration: none; font-size: 0.9rem;">← Back to Students</a>
+  <a href="{% url 'mobile_student_list' schema_name=tenant.schema_name %}" style="color: var(--text-muted); text-decoration: none; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 4px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+    Back to Students
+  </a>
 </div>
+
+<!-- ========== EDIT MODAL ========== -->
+<div id="editModal" class="modal-overlay">
+  <div class="modal-box">
+    <button class="modal-close" id="closeEditModal">&times;</button>
+    <h2>Edit Student</h2>
+    <form id="editForm" method="post" action="{% url 'edit_student' schema_name=tenant.schema_name student_id=student.id %}">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="edit_name">Name</label>
+        <input type="text" name="name" id="edit_name" value="{{ student.name }}" required>
+      </div>
+      <div class="form-group">
+        <label for="edit_father_name">Father Name</label>
+        <input type="text" name="father_name" id="edit_father_name" value="{{ student.father_name }}" required>
+      </div>
+      <div class="form-group">
+        <label for="edit_father_cnic">Father CNIC</label>
+        <input type="text" name="father_cnic" id="edit_father_cnic" value="{{ student.father_cnic }}" required>
+      </div>
+      <div class="form-group">
+        <label for="edit_parent_mobile">Parent Mobile</label>
+        <input type="text" name="parent_mobile" id="edit_parent_mobile" value="{{ student.parent_mobile }}" required>
+      </div>
+      <div class="form-group">
+        <label for="edit_grade">Grade</label>
+        <input type="text" name="grade" id="edit_grade" value="{{ student.grade }}" required>
+      </div>
+      <div class="form-group">
+        <label for="edit_section">Section</label>
+        <input type="text" name="section" id="edit_section" value="{{ student.section }}" required>
+      </div>
+      <div class="form-group">
+        <label for="edit_admission_date">Admission Date</label>
+        <input type="date" name="admission_date" id="edit_admission_date" value="{{ student.admission_date|date:'Y-m-d' }}" required>
+      </div>
+      <div class="form-group">
+        <label for="edit_status">Status</label>
+        <select name="status" id="edit_status">
+          <option value="active" {% if student.status == 'active' %}selected{% endif %}>Active</option>
+          <option value="suspended" {% if student.status == 'suspended' %}selected{% endif %}>Suspended</option>
+          <option value="graduated" {% if student.status == 'graduated' %}selected{% endif %}>Graduated</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelEditBtn">Cancel</button>
+        <button type="submit" class="btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ========== TRANSCRIPT MODAL ========== -->
+<div id="transcriptModal" class="modal-overlay">
+  <div class="modal-box" style="max-width: 700px;">
+    <button class="modal-close" id="closeTranscriptModal">&times;</button>
+    <h2>Fee Transcript – {{ student.name }}</h2>
+    <div style="margin-bottom: 10px; font-size:0.85rem; color:var(--muted);">
+      {{ student.grade }} • Roll {{ student.roll_number }}
+    </div>
+    <h3 style="margin: 16px 0 8px;">Fee Records</h3>
+    <table class="transcript-table">
+      <thead>
+        <tr><th>Month/Year</th><th>Amount</th><th>Paid</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {% for r in fee_records %}
+        <tr>
+          <td>{{ r.month }}/{{ r.year }}</td>
+          <td>₹{{ r.amount|floatformat:2 }}</td>
+          <td>₹{{ r.paid_amount|floatformat:2 }}</td>
+          <td><span class="status-badge status-{{ r.status|lower }}">{{ r.get_status_display }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">No fee records.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <h3 style="margin: 16px 0 8px;">Payment History</h3>
+    <table class="transcript-table">
+      <thead>
+        <tr><th>Date</th><th>Amount</th><th>Mode</th><th>Remaining</th></tr>
+      </thead>
+      <tbody>
+        {% for item in payments %}
+        <tr>
+          <td>{{ item.payment.payment_date|date:'d M Y' }}</td>
+          <td>₹{{ item.payment.amount|floatformat:2 }}</td>
+          <td>{{ item.payment.get_payment_mode_display }}</td>
+          <td>₹{{ item.remaining_balance|floatformat:2 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">No payments.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="transcript-total">
+      Total Paid: ₹{{ total_paid|floatformat:2 }} &nbsp;|&nbsp; Total Pending: ₹{{ pending_total|floatformat:2 }}
+    </div>
+    <div style="margin-top: 16px; text-align: right;">
+      <button class="btn-secondary" id="printTranscriptBtn">Print Transcript</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    // ---- Edit Modal ----
+    const editModal = document.getElementById('editModal');
+    const editBtn = document.getElementById('editProfileBtn');
+    const closeEdit = document.getElementById('closeEditModal');
+    const cancelEdit = document.getElementById('cancelEditBtn');
+
+    function openEditModal() {
+      editModal.classList.add('active');
+    }
+    function closeEditModal() {
+      editModal.classList.remove('active');
+    }
+    editBtn.addEventListener('click', openEditModal);
+    closeEdit.addEventListener('click', closeEditModal);
+    cancelEdit.addEventListener('click', closeEditModal);
+    editModal.addEventListener('click', function(e) {
+      if (e.target === this) closeEditModal();
+    });
+
+    // Submit edit form via AJAX to avoid full page reload
+    const editForm = document.getElementById('editForm');
+    editForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const formData = new FormData(this);
+      const url = this.action;
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        if (resp.ok) {
+          // Reload the page to reflect changes (or we could update fields dynamically)
+          window.location.reload();
+        } else {
+          const text = await resp.text();
+          alert('Error updating student: ' + text);
+        }
+      } catch(err) {
+        alert('Network error: ' + err.message);
+      }
+    });
+
+    // ---- Transcript Modal ----
+    const transcriptModal = document.getElementById('transcriptModal');
+    const viewTranscriptBtn = document.getElementById('viewTranscriptBtn');
+    const closeTranscript = document.getElementById('closeTranscriptModal');
+
+    function openTranscriptModal() {
+      transcriptModal.classList.add('active');
+    }
+    function closeTranscriptModal() {
+      transcriptModal.classList.remove('active');
+    }
+    viewTranscriptBtn.addEventListener('click', openTranscriptModal);
+    closeTranscript.addEventListener('click', closeTranscriptModal);
+    transcriptModal.addEventListener('click', function(e) {
+      if (e.target === this) closeTranscriptModal();
+    });
+
+    // Print transcript
+    document.getElementById('printTranscriptBtn').addEventListener('click', function() {
+      window.print();
+    });
+
+  })();
+</script>
 {% endblock %}
 """
 
-def main():
-    file_path = 'templates/mobile/student_profile.html'
-    if not os.path.exists(file_path):
-        print(f"❌ Error: {file_path} not found. Are you in the project root?")
+# ============================================================
+# 2. PATCH VIEWS.PY – redirect to mobile profile on mobile
+# ============================================================
+VIEWS_PATCH = """
+# ---------- PATCH: Redirect to mobile profile from edit_student ----------
+# Find the edit_student function and modify redirect
+def edit_student(request, schema_name, student_id):
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        student = get_object_or_404(Student, id=student_id)
+        if request.method == "POST":
+            form = StudentForm(request.POST, instance=student)
+            if form.is_valid():
+                form.save()
+                messages.success(request, f"Student {student.name} updated successfully.")
+                # Redirect to mobile profile if mobile user agent
+                if is_mobile_user_agent(request):
+                    return redirect('mobile_student_profile', schema_name=schema_name, student_id=student.id)
+                return redirect("student_profile", schema_name=schema_name, student_id=student.id)
+        else:
+            form = StudentForm(instance=student)
+        grades = FeeStructure.objects.values_list("grade", flat=True).distinct()
+        context = {
+            "tenant": tenant, "form": form, "student": student, "grades": grades,
+            "logo_url": tenant.school_logo.url if tenant.school_logo else None,
+        }
+    return render(request, "tenant/student_form.html", context)
+"""
+
+def patch_views():
+    views_path = "axis_saas/views.py"
+    if not os.path.exists(views_path):
+        print(f"❌ Error: {views_path} not found.")
         return
 
-    with open(file_path, 'w', encoding='utf-8') as f:
-        f.write(NEW_CONTENT)
+    with open(views_path, "r") as f:
+        content = f.read()
 
-    print(f"✅ Successfully updated {file_path} with premium design.")
+    # Replace the edit_student function block
+    # Find the existing edit_student definition
+    pattern = r"def edit_student\(request, schema_name, student_id\):.*?(?=\n@|\ndef |\Z)"
+    match = re.search(pattern, content, re.DOTALL)
+    if match:
+        old_func = match.group(0)
+        # Replace with our patched version
+        # We'll use the VIEWS_PATCH content but we need to ensure indentation matches
+        # The VIEWS_PATCH is a block of code; we can just replace the whole function
+        new_func = """def edit_student(request, schema_name, student_id):
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        student = get_object_or_404(Student, id=student_id)
+        if request.method == "POST":
+            form = StudentForm(request.POST, instance=student)
+            if form.is_valid():
+                form.save()
+                messages.success(request, f"Student {student.name} updated successfully.")
+                # Redirect to mobile profile if mobile user agent
+                if is_mobile_user_agent(request):
+                    return redirect('mobile_student_profile', schema_name=schema_name, student_id=student.id)
+                return redirect("student_profile", schema_name=schema_name, student_id=student.id)
+        else:
+            form = StudentForm(instance=student)
+        grades = FeeStructure.objects.values_list("grade", flat=True).distinct()
+        context = {
+            "tenant": tenant, "form": form, "student": student, "grades": grades,
+            "logo_url": tenant.school_logo.url if tenant.school_logo else None,
+        }
+    return render(request, "tenant/student_form.html", context)"""
+        # Replace with new function
+        content = content.replace(old_func, new_func)
+        with open(views_path, "w") as f:
+            f.write(content)
+        print("✅ Patched views.py: edit_student now redirects to mobile profile on mobile.")
+    else:
+        print("⚠️ Could not find edit_student function in views.py. Skipping patch.")
 
-if __name__ == '__main__':
+# ============================================================
+# 3. MAIN
+# ============================================================
+def main():
+    # Write new template
+    template_path = "templates/mobile/student_profile.html"
+    if not os.path.exists(os.path.dirname(template_path)):
+        os.makedirs(os.path.dirname(template_path))
+    with open(template_path, "w", encoding="utf-8") as f:
+        f.write(NEW_TEMPLATE)
+    print("✅ Updated templates/mobile/student_profile.html with premium design, edit modal, and transcript modal.")
+
+    # Patch views
+    patch_views()
+
+    print("\n🎉 All changes applied. Restart your server to see the new mobile student profile.")
+    print("   - Edit modal opens inline (no navigation).")
+    print("   - Transcript modal shows all fee/payment history.")
+    print("   - Edit button now redirects back to mobile profile after saving.")
+
+if __name__ == "__main__":
     main()
